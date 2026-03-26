@@ -1,0 +1,23 @@
+SYSTEM SPECIFICATIONS: PROJECTPRO V10
+
+1. Task Management (Table View):
+   - Project & Task Entry: Fields for project name and task description.
+   - Date Management: Full Date Pickers for Start and End dates.
+   - Team Assignment: Multi-select functionality to assign team members from a predefined list.
+   - Progress Tracking: Interactive sliders with real-time percentage display.
+   - Custom Styling: Individual color picker for each task to reflect on the Gantt chart.
+
+2. Hierarchical Gantt Chart:
+   - Project Grouping: Tasks are automatically nested under a "Project Parent Row".
+   - Global Zoom (Scale): A synchronized zoom that scales bars, grid, and timeline headers simultaneously.
+   - Dynamic Timeline: Auto-calculates the range from the earliest task to the latest (plus buffer).
+   - Sticky Navigation: Task names remain visible on the left during horizontal scrolling.
+   - Milestones: Visual diamond indicators (♦) with exact end dates displayed at the end of each bar.
+
+3. Team & Analytics:
+   - Personnel Management: Dedicated tab to add/remove team members and roles.
+   - Data Visualization: Dashboard featuring workload distribution per member and overall completion stats.
+
+4. Data Integrity:
+   - Excel Integration: Full Export/Import support for .xlsx files (Multiple sheets: Tasks & Team).
+   - Persistence: Automatic data sync with Browser LocalStorage.
