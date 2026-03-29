@@ -1,11 +1,11 @@
 /* PROJECTPRO MANAGEMENT SUITE 
-   Version: 10.4 
-   Fixes: Forced -7 day offset and Auto-Scroll to Today.
+   Version: 10.5 
+   Changes: CSV Import/Export & Team Roles Visibility
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Upload, LayoutDashboard, Clock, List, Download, Trash2, Plus, ZoomIn, ZoomOut, Users, Activity } from 'lucide-react';
+import { Upload, LayoutDashboard, Clock, List, Download, Trash2, Plus, ZoomIn, ZoomOut, Users, Activity, ShieldCheck } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const Dashboard = () => {
@@ -28,23 +28,19 @@ const Dashboard = () => {
 
   const projectRange = useMemo(() => {
     const today = new Date();
-    // FORCE START: Exactly 7 days ago, snapped to Sunday
     const start = new Date(today);
     start.setDate(today.getDate() - 7);
     start.setDate(start.getDate() - start.getDay());
 
-    // END: 60 days from now or latest task end + buffer
     let end = new Date(today);
     end.setDate(end.getDate() + 60);
     if (data.length > 0) {
       const latestTaskEnd = new Date(Math.max(...data.map(d => safeDate(d.end))));
       if (latestTaskEnd > end) end = new Date(latestTaskEnd.getTime() + (14 * 24 * 60 * 60 * 1000));
     }
-    
     return { start, end, totalDays: Math.ceil((end - start) / (1000 * 60 * 60 * 24)) };
   }, [data]);
 
-  // AUTO-SCROLL TO TODAY LOGIC
   useEffect(() => {
     if (activeTab === 'gantt' && ganttContainerRef.current) {
       const today = new Date();
@@ -69,21 +65,39 @@ const Dashboard = () => {
     setData(data.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
 
-  const handleExport = () => {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "Tasks");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(team), "Team");
-    XLSX.writeFile(wb, "ProjectPro_v10.4.xlsx");
+  // --- CSV EXPORT LOGIC ---
+  const handleExportCSV = () => {
+    if (data.length === 0) return alert("No data to export");
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", "ProjectPro_Tasks_v10.5.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const handleImport = (e) => {
+  // --- CSV IMPORT LOGIC ---
+  const handleImportCSV = (e) => {
     const file = e.target.files[0];
+    if (!file) return;
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const wb = XLSX.read(evt.target.result, { type: 'binary' });
-      const tasks = XLSX.utils.sheet_to_json(wb.Sheets["Tasks"] || wb.Sheets[wb.SheetNames[0]]);
-      setData(tasks.map((t, i) => ({ ...t, id: Date.now() + i, color: t.color || '#6366f1' })));
-      if (wb.Sheets["Team"]) setTeam(XLSX.utils.sheet_to_json(wb.Sheets["Team"]));
+      const content = evt.target.result;
+      const workbook = XLSX.read(content, { type: 'binary' });
+      const sheetName = workbook.SheetNames[0];
+      const csvData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      
+      const validatedData = csvData.map((t, i) => ({
+        ...t,
+        id: t.id || Date.now() + i,
+        progress: Number(t.progress) || 0,
+        color: t.color || '#6366f1'
+      }));
+      
+      setData(validatedData);
     };
     reader.readAsBinaryString(file);
   };
@@ -95,7 +109,7 @@ const Dashboard = () => {
           <div className="bg-indigo-500 p-2 rounded-xl"><Activity size={20}/></div>
           <h1 className="font-black text-xl italic tracking-tighter uppercase">ProjectPro</h1>
         </div>
-        <div className="text-[9px] font-black text-indigo-400 mb-8 bg-indigo-500/10 w-fit px-2 py-0.5 rounded border border-indigo-500/20">VERSION 10.4</div>
+        <div className="text-[9px] font-black text-indigo-400 mb-8 bg-indigo-500/10 w-fit px-2 py-0.5 rounded border border-indigo-500/20">VERSION 10.5</div>
         
         <nav className="space-y-1.5 flex-1 font-bold text-sm">
           <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'dashboard' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><LayoutDashboard size={17}/> Dashboard</button>
@@ -105,8 +119,8 @@ const Dashboard = () => {
         </nav>
 
         <div className="pt-4 border-t border-white/10 space-y-2">
-          <button onClick={handleExport} className="w-full flex items-center justify-center gap-2 text-xs font-black bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-500 transition-all"><Download size={14}/> EXPORT EXCEL</button>
-          <label className="w-full flex items-center justify-center gap-2 text-xs font-black bg-slate-800 text-slate-400 p-3 rounded-xl cursor-pointer hover:bg-slate-700 transition-all border border-white/5"><Upload size={14}/> IMPORT EXCEL<input type="file" className="hidden" onChange={handleImport}/></label>
+          <button onClick={handleExportCSV} className="w-full flex items-center justify-center gap-2 text-xs font-black bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-500 transition-all"><Download size={14}/> EXPORT CSV</button>
+          <label className="w-full flex items-center justify-center gap-2 text-xs font-black bg-slate-800 text-slate-400 p-3 rounded-xl cursor-pointer hover:bg-slate-700 transition-all border border-white/5"><Upload size={14}/> IMPORT CSV<input type="file" accept=".csv" className="hidden" onChange={handleImportCSV}/></label>
         </div>
       </aside>
 
@@ -150,41 +164,32 @@ const Dashboard = () => {
                </div>
                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Focusing on Today</div>
             </div>
-
             <div className="flex-1 overflow-auto relative" ref={ganttContainerRef}>
               <div style={{ width: `${projectRange.totalDays * 40 * zoomScale}px` }} className="relative">
-                {/* Timeline Header */}
                 <div className="flex sticky top-0 z-30 bg-white/95 border-b ml-[200px]">
                   {Array.from({length: Math.ceil(projectRange.totalDays / 7)}).map((_, i) => {
                     const d = new Date(projectRange.start); d.setDate(d.getDate() + (i * 7));
                     return <div key={i} className="flex-1 text-center py-3 border-r border-slate-50 font-black text-[9px] text-slate-400 uppercase" style={{ minWidth: `${7 * 40 * zoomScale}px` }}>W{i+1} • {d.getDate()}/{d.getMonth()+1}</div>
                   })}
                 </div>
-
-                {/* Vertical Lines */}
                 <div className="absolute inset-0 ml-[200px] pointer-events-none flex z-0">
                    {Array.from({length: projectRange.totalDays}).map((_, i) => (
                      <div key={i} className="border-r border-slate-50/30 h-full" style={{ width: `${40 * zoomScale}px` }} />
                    ))}
                 </div>
-
-                {/* TODAY LINE */}
                 {(() => {
                   const today = new Date();
                   if (today >= projectRange.start && today <= projectRange.end) {
                     const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
                     const leftPos = 200 + (diffDays * 40 * zoomScale);
                     return (
-                      <div className="absolute top-0 bottom-0 z-40 pointer-events-none border-l-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]"
-                           style={{ left: `${leftPos}px` }}>
+                      <div className="absolute top-0 bottom-0 z-40 pointer-events-none border-l-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]" style={{ left: `${leftPos}px` }}>
                         <div className="bg-red-500 text-white text-[7px] font-black px-1 py-0.5 rounded-b absolute top-[36px] left-[-1px] whitespace-nowrap uppercase">Today</div>
                       </div>
                     );
                   }
                   return null;
                 })()}
-
-                {/* Content Rows */}
                 <div className="relative z-10">
                   {groupedData.map((group, idx) => (
                     <React.Fragment key={idx}>
@@ -230,13 +235,29 @@ const Dashboard = () => {
         )}
 
         {activeTab === 'team' && (
-           <div className="max-w-xl bg-white p-8 rounded-[2rem] shadow-sm border">
-              <h2 className="text-xl font-black mb-6 italic tracking-tighter uppercase">Team Management</h2>
-              <div className="flex gap-2 mb-6">
-                <input placeholder="Name" className="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-sm" value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} />
-                <button onClick={() => {if(newMember.name) setTeam([...team, newMember]); setNewMember({name:''})}} className="bg-indigo-600 text-white px-6 rounded-xl font-black hover:bg-indigo-700 transition-all text-xs">ADD</button>
+           <div className="max-w-2xl bg-white p-8 rounded-[2rem] shadow-sm border">
+              <h2 className="text-xl font-black mb-6 italic tracking-tighter uppercase flex items-center gap-2">
+                <ShieldCheck className="text-indigo-600" size={24}/> Team Management
+              </h2>
+              <div className="flex gap-2 mb-8">
+                <input placeholder="Name" className="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-sm font-bold" value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} />
+                <input placeholder="Role (e.g. Developer)" className="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-sm font-bold" value={newMember.role} onChange={e => setNewMember({...newMember, role: e.target.value})} />
+                <button onClick={() => {if(newMember.name) setTeam([...team, newMember]); setNewMember({name:'', role:''})}} className="bg-indigo-600 text-white px-8 rounded-xl font-black hover:bg-indigo-700 transition-all text-xs uppercase">Add Member</button>
               </div>
-              <div className="space-y-2">{team.map((m, i) => (<div key={i} className="flex justify-between p-3 bg-slate-50 rounded-xl font-bold border border-slate-100 text-sm">{m.name} <button onClick={() => setTeam(team.filter((_, idx) => idx !== i))} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button></div>))}</div>
+              <div className="grid grid-cols-1 gap-2">
+                {team.map((m, i) => (
+                  <div key={i} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-200 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center font-black text-xs uppercase">{m.name.charAt(0)}</div>
+                      <div>
+                        <p className="font-black text-sm text-slate-800 uppercase leading-none mb-1">{m.name}</p>
+                        <p className="text-[10px] font-bold text-indigo-500/70 uppercase tracking-widest">{m.role || 'No Role Assigned'}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setTeam(team.filter((_, idx) => idx !== i))} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={16}/></button>
+                  </div>
+                ))}
+              </div>
            </div>
         )}
       </main>
