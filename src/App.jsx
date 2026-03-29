@@ -1,11 +1,11 @@
 /* PROJECTPRO MANAGEMENT SUITE 
-  Version: 10.2 
-  Features: Compact Rows, Hierarchical Gantt, Global Zoom, Today Line, Team & Analytics
+  Version: 10.4 
+  Fixes: Forced -7 day offset and Auto-Scroll to Today.
 */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Upload, LayoutDashboard, Clock, List, Download, Trash2, Plus, ZoomIn, ZoomOut, Users, Calendar, FileText, Activity } from 'lucide-react';
+import { Upload, LayoutDashboard, Clock, List, Download, Trash2, Plus, ZoomIn, ZoomOut, Users, Calendar, Activity } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const Dashboard = () => {
@@ -14,20 +14,40 @@ const Dashboard = () => {
   const [data, setData] = useState(() => JSON.parse(localStorage.getItem('project_tasks')) || []);
   const [zoomScale, setZoomScale] = useState(1);
   const [newMember, setNewMember] = useState({ name: '', role: '' });
+  const ganttContainerRef = useRef(null);
 
   useEffect(() => {
     localStorage.setItem('project_tasks', JSON.stringify(data));
     localStorage.setItem('project_team', JSON.stringify(team));
   }, [data, team]);
 
+  // AUTO-SCROLL TO TODAY LOGIC
+  useEffect(() => {
+    if (activeTab === 'gantt' && ganttContainerRef.current) {
+      const today = new Date();
+      const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
+      const scrollPos = (diffDays * 40 * zoomScale);
+      ganttContainerRef.current.scrollLeft = scrollPos - 100; // Offset a bit to see the line clearly
+    }
+  }, [activeTab, zoomScale]);
+
   const safeDate = (d) => { const date = new Date(d); return isNaN(date) ? new Date() : date; };
 
   const projectRange = useMemo(() => {
-    if (data.length === 0) return { start: new Date(), end: new Date(Date.now() + 30*24*60*60*1000), totalDays: 30 };
-    const start = new Date(Math.min(...data.map(d => safeDate(d.start))));
-    const end = new Date(Math.max(...data.map(d => safeDate(d.end))));
+    const today = new Date();
+    // FORCE START: Exactly 7 days ago, snapped to Sunday
+    const start = new Date(today);
+    start.setDate(today.getDate() - 7);
     start.setDate(start.getDate() - start.getDay());
-    end.setDate(end.getDate() + 14); 
+
+    // END: 60 days from now or latest task end + buffer
+    let end = new Date(today);
+    end.setDate(end.getDate() + 60);
+    if (data.length > 0) {
+      const latestTaskEnd = new Date(Math.max(...data.map(d => safeDate(d.end))));
+      if (latestTaskEnd > end) end = new Date(latestTaskEnd.getTime() + (14 * 24 * 60 * 60 * 1000));
+    }
+
     return { start, end, totalDays: Math.ceil((end - start) / (1000 * 60 * 60 * 24)) };
   }, [data]);
 
@@ -42,11 +62,15 @@ const Dashboard = () => {
     return Object.values(groups);
   }, [data]);
 
+  const updateTask = (id, field, value) => {
+    setData(data.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+
   const handleExport = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "Tasks");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(team), "Team");
-    XLSX.writeFile(wb, "ProjectPro_v10.2_Export.xlsx");
+    XLSX.writeFile(wb, "ProjectPro_v10.4.xlsx");
   };
 
   const handleImport = (e) => {
@@ -61,10 +85,6 @@ const Dashboard = () => {
     reader.readAsBinaryString(file);
   };
 
-  const updateTask = (id, field, value) => {
-    setData(data.map(item => item.id === id ? { ...item, [field]: value } : item));
-  };
-
   return (
     <div className="flex h-screen bg-slate-50 text-left font-sans overflow-hidden" dir="ltr">
       {/* Sidebar */}
@@ -73,15 +93,13 @@ const Dashboard = () => {
           <div className="bg-indigo-500 p-2 rounded-xl"><Activity size={20}/></div>
           <h1 className="font-black text-xl italic tracking-tighter uppercase">ProjectPro</h1>
         </div>
-        <div className="text-[9px] font-black text-indigo-400 mb-8 bg-indigo-500/10 w-fit px-2 py-0.5 rounded border border-indigo-500/20">VERSION 10.2</div>
-        
+        <div className="text-[9px] font-black text-indigo-400 mb-8 bg-indigo-500/10 w-fit px-2 py-0.5 rounded border border-indigo-500/20">VERSION 10.4</div>
         <nav className="space-y-1.5 flex-1 font-bold text-sm">
           <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'dashboard' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><LayoutDashboard size={17}/> Dashboard</button>
           <button onClick={() => setActiveTab('tasks')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'tasks' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><List size={17}/> Tasks Table</button>
           <button onClick={() => setActiveTab('gantt')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'gantt' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><Clock size={17}/> Gantt View</button>
           <button onClick={() => setActiveTab('team')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'team' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><Users size={17}/> Team</button>
         </nav>
-        
         <div className="pt-4 border-t border-white/10 space-y-2">
           <button onClick={handleExport} className="w-full flex items-center justify-center gap-2 text-xs font-black bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-500 transition-all"><Download size={14}/> EXPORT EXCEL</button>
           <label className="w-full flex items-center justify-center gap-2 text-xs font-black bg-slate-800 text-slate-400 p-3 rounded-xl cursor-pointer hover:bg-slate-700 transition-all border border-white/5"><Upload size={14}/> IMPORT EXCEL<input type="file" className="hidden" onChange={handleImport}/></label>
@@ -89,21 +107,20 @@ const Dashboard = () => {
       </aside>
 
       <main className="flex-1 overflow-y-auto p-8">
-        {/* Dashboard and Team Tabs remain consistent... */}
         {activeTab === 'tasks' && (
           <div className="bg-white rounded-[1.5rem] shadow-sm border overflow-hidden">
             <table className="w-full text-left">
               <thead className="bg-slate-50 border-b text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                <tr><th className="p-4">Project / Task</th><th className="p-4">Team</th><th className="p-4">Dates</th><th className="p-4">Progress</th><th className="p-4">Action</th></tr>
+                <tr><th className="p-4">Project / Task</th><th className="p-4">Team</th><th className="p-4">Dates</th><th className="p-4">Progress</th><th className="p-4 text-center">Delete</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-bold text-xs">
                 {data.map(t => (
                   <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-3"><input className="text-indigo-600 block bg-transparent outline-none mb-0.5 text-[10px]" value={t.project} onChange={e => updateTask(t.id, 'project', e.target.value)} /><input className="text-slate-800 block bg-transparent outline-none w-full" value={t.task} onChange={e => updateTask(t.id, 'task', e.target.value)} /></td>
+                    <td className="p-3"><input className="text-indigo-600 block bg-transparent outline-none mb-0.5 text-[10px]" value={t.project} onChange={e => updateTask(t.id, 'project', e.target.value)} /><input className="text-slate-800 block bg-transparent outline-none w-full font-bold" value={t.task} onChange={e => updateTask(t.id, 'task', e.target.value)} /></td>
                     <td className="p-3"><div className="flex flex-wrap gap-1">{team.map(m => (<button key={m.name} onClick={() => { const cur = t.person || ""; const up = cur.includes(m.name) ? cur.split(',').filter(p => p.trim() !== m.name).join(',') : (cur ? cur + ',' + m.name : m.name); updateTask(t.id, 'person', up); }} className={`px-1.5 py-0.5 rounded text-[8px] ${t.person?.includes(m.name) ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{m.name}</button>))}</div></td>
-                    <td className="p-3"><div className="flex gap-1"><input type="date" className="text-[9px] p-0.5 border rounded" value={t.start} onChange={e => updateTask(t.id, 'start', e.target.value)} /><input type="date" className="text-[9px] p-0.5 border rounded" value={t.end} onChange={e => updateTask(t.id, 'end', e.target.value)} /></div></td>
+                    <td className="p-3 flex gap-1"><input type="date" className="text-[9px] p-0.5 border rounded" value={t.start} onChange={e => updateTask(t.id, 'start', e.target.value)} /><input type="date" className="text-[9px] p-0.5 border rounded" value={t.end} onChange={e => updateTask(t.id, 'end', e.target.value)} /></td>
                     <td className="p-3"><div className="flex items-center gap-2"><input type="range" className="w-16 accent-indigo-600" value={t.progress} onChange={e => updateTask(t.id, 'progress', e.target.value)} /> <span className="text-[9px]">{t.progress}%</span></div></td>
-                    <td className="p-3"><button onClick={() => setData(data.filter(x => x.id !== t.id))} className="text-slate-200 hover:text-red-500"><Trash2 size={14}/></button></td>
+                    <td className="p-3 text-center"><button onClick={() => setData(data.filter(x => x.id !== t.id))} className="text-slate-200 hover:text-red-500"><Trash2 size={14}/></button></td>
                   </tr>
                 ))}
                 <tr><td colSpan={5} className="p-3 text-center"><button onClick={() => setData([...data, {id: Date.now(), project: 'NEW', task: 'Task', start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0], progress: 0, color: '#6366f1'}])} className="text-[10px] font-black text-indigo-600 flex items-center gap-2 mx-auto"><Plus size={14}/> ADD TASK</button></td></tr>
@@ -120,10 +137,10 @@ const Dashboard = () => {
                   <span className="px-3 py-1 text-[9px] font-black border-x uppercase flex items-center">Scale: {Math.round(zoomScale*100)}%</span>
                   <button onClick={() => setZoomScale(Math.min(2.5, zoomScale + 0.1))} className="p-1.5 hover:bg-slate-50 rounded-md"><ZoomIn size={16}/></button>
                </div>
-               <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">v10.2 Compact Gantt</div>
+               <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Focusing on Today</div>
             </div>
 
-            <div className="flex-1 overflow-auto relative">
+            <div className="flex-1 overflow-auto relative" ref={ganttContainerRef}>
               <div style={{ width: `${projectRange.totalDays * 40 * zoomScale}px` }} className="relative">
                 {/* Timeline Header */}
                 <div className="flex sticky top-0 z-30 bg-white/95 border-b ml-[200px]">
@@ -136,32 +153,29 @@ const Dashboard = () => {
                 {/* Vertical Lines */}
                 <div className="absolute inset-0 ml-[200px] pointer-events-none flex z-0">
                    {Array.from({length: projectRange.totalDays}).map((_, i) => (
-                     <div key={i} className="border-r border-slate-50/50 h-full" style={{ width: `${40 * zoomScale}px` }} />
+                     <div key={i} className="border-r border-slate-50/30 h-full" style={{ width: `${40 * zoomScale}px` }} />
                    ))}
                 </div>
 
-                {/* TODAY LINE FIX */}
+                {/* TODAY LINE */}
                 {(() => {
                   const today = new Date();
-                  if (today >= projectRange.start && today <= projectRange.end) {
-                    const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
-                    const leftPos = 200 + (diffDays * 40 * zoomScale);
-                    return (
-                      <div className="absolute top-0 bottom-0 z-40 pointer-events-none border-l-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]"
-                           style={{ left: `${leftPos}px` }}>
-                        <div className="bg-red-500 text-white text-[7px] font-black px-1 py-0.5 rounded-b absolute top-[36px] left-[-1px] whitespace-nowrap uppercase">Today</div>
-                      </div>
-                    );
-                  }
-                  return null;
+                  const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
+                  const leftPos = 200 + (diffDays * 40 * zoomScale);
+                  return (
+                    <div className="absolute top-0 bottom-0 z-40 pointer-events-none border-l-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]"
+                         style={{ left: `${leftPos}px` }}>
+                      <div className="bg-red-500 text-white text-[7px] font-black px-1 py-0.5 rounded-b absolute top-[36px] left-[-1px] whitespace-nowrap uppercase">Today</div>
+                    </div>
+                  );
                 })()}
 
-                {/* Rows */}
+                {/* Content Rows */}
                 <div className="relative z-10">
                   {groupedData.map((group, idx) => (
                     <React.Fragment key={idx}>
                       <div className="flex items-center border-b bg-indigo-50/20 sticky left-0 z-10">
-                        <div className="w-[200px] shrink-0 p-3 bg-indigo-50/50 border-r sticky left-0 z-30 font-black text-[10px] text-indigo-700 uppercase">📁 {group.name}</div>
+                        <div className="w-[200px] shrink-0 p-3 bg-indigo-50/50 border-r sticky left-0 z-30 font-black text-[10px] text-indigo-700 uppercase leading-none">📁 {group.name}</div>
                         <div className="flex-1 h-8 relative">
                            <div className="absolute h-1 top-3.5 bg-indigo-300/30 rounded-full" 
                                 style={{ 
@@ -199,6 +213,25 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Dashboard and Team Setup tabs remain consistent */}
+        {activeTab === 'dashboard' && (
+          <div className="grid grid-cols-2 gap-8 h-80">
+            <div className="bg-white p-6 rounded-3xl shadow-sm border"><h3 className="text-xs font-black text-slate-400 mb-4 uppercase">Team Workload</h3><ResponsiveContainer width="100%" height="100%"><BarChart data={team.map(m => ({ name: m.name, count: data.filter(d => d.person?.includes(m.name)).length }))}><XAxis dataKey="name" fontSize={10}/><Tooltip/><Bar dataKey="count" fill="#6366f1" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>
+            <div className="bg-white p-6 rounded-3xl shadow-sm border"><h3 className="text-xs font-black text-slate-400 mb-4 uppercase">Overall Progress</h3><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{name:'Done', value: data.filter(d=>d.progress==100).length}, {name:'Open', value: data.filter(d=>d.progress<100).length}]} innerRadius={50} outerRadius={70} dataKey="value"><Cell fill="#10b981"/><Cell fill="#6366f1"/></Pie><Tooltip/></PieChart></ResponsiveContainer></div>
+          </div>
+        )}
+
+        {activeTab === 'team' && (
+           <div className="max-w-xl bg-white p-8 rounded-[2rem] shadow-sm border">
+              <h2 className="text-xl font-black mb-6 italic tracking-tighter uppercase">Team Management</h2>
+              <div className="flex gap-2 mb-6">
+                <input placeholder="Name" className="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-sm" value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} />
+                <button onClick={() => {if(newMember.name) setTeam([...team, newMember]); setNewMember({name:''})}} className="bg-indigo-600 text-white px-6 rounded-xl font-black hover:bg-indigo-700 transition-all text-xs">ADD</button>
+              </div>
+              <div className="space-y-2">{team.map((m, i) => (<div key={i} className="flex justify-between p-3 bg-slate-50 rounded-xl font-bold border border-slate-100 text-sm">{m.name} <button onClick={() => setTeam(team.filter((_, idx) => idx !== i))} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button></div>))}</div>
+           </div>
         )}
       </main>
     </div>
