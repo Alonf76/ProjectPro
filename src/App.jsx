@@ -1,11 +1,11 @@
 /* PROJECTPRO MANAGEMENT SUITE 
-  Version: 10.4 
-  Fixes: Forced -7 day offset and Auto-Scroll to Today.
+   Version: 10.4 
+   Fixes: Forced -7 day offset and Auto-Scroll to Today.
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Upload, LayoutDashboard, Clock, List, Download, Trash2, Plus, ZoomIn, ZoomOut, Users, Calendar, Activity } from 'lucide-react';
+import { Upload, LayoutDashboard, Clock, List, Download, Trash2, Plus, ZoomIn, ZoomOut, Users, Activity } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const Dashboard = () => {
@@ -21,17 +21,10 @@ const Dashboard = () => {
     localStorage.setItem('project_team', JSON.stringify(team));
   }, [data, team]);
 
-  // AUTO-SCROLL TO TODAY LOGIC
-  useEffect(() => {
-    if (activeTab === 'gantt' && ganttContainerRef.current) {
-      const today = new Date();
-      const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
-      const scrollPos = (diffDays * 40 * zoomScale);
-      ganttContainerRef.current.scrollLeft = scrollPos - 100; // Offset a bit to see the line clearly
-    }
-  }, [activeTab, zoomScale]);
-
-  const safeDate = (d) => { const date = new Date(d); return isNaN(date) ? new Date() : date; };
+  const safeDate = (d) => { 
+    const date = new Date(d); 
+    return isNaN(date) ? new Date() : date; 
+  };
 
   const projectRange = useMemo(() => {
     const today = new Date();
@@ -47,9 +40,19 @@ const Dashboard = () => {
       const latestTaskEnd = new Date(Math.max(...data.map(d => safeDate(d.end))));
       if (latestTaskEnd > end) end = new Date(latestTaskEnd.getTime() + (14 * 24 * 60 * 60 * 1000));
     }
-
+    
     return { start, end, totalDays: Math.ceil((end - start) / (1000 * 60 * 60 * 24)) };
   }, [data]);
+
+  // AUTO-SCROLL TO TODAY LOGIC
+  useEffect(() => {
+    if (activeTab === 'gantt' && ganttContainerRef.current) {
+      const today = new Date();
+      const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
+      const scrollPos = (diffDays * 40 * zoomScale);
+      ganttContainerRef.current.scrollLeft = scrollPos - 100;
+    }
+  }, [activeTab, zoomScale, projectRange.start]);
 
   const groupedData = useMemo(() => {
     const groups = {};
@@ -87,19 +90,20 @@ const Dashboard = () => {
 
   return (
     <div className="flex h-screen bg-slate-50 text-left font-sans overflow-hidden" dir="ltr">
-      {/* Sidebar */}
       <aside className="w-64 bg-slate-900 text-slate-400 p-6 flex flex-col shrink-0 shadow-2xl">
         <div className="flex items-center gap-3 mb-2 text-white">
           <div className="bg-indigo-500 p-2 rounded-xl"><Activity size={20}/></div>
           <h1 className="font-black text-xl italic tracking-tighter uppercase">ProjectPro</h1>
         </div>
         <div className="text-[9px] font-black text-indigo-400 mb-8 bg-indigo-500/10 w-fit px-2 py-0.5 rounded border border-indigo-500/20">VERSION 10.4</div>
+        
         <nav className="space-y-1.5 flex-1 font-bold text-sm">
           <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'dashboard' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><LayoutDashboard size={17}/> Dashboard</button>
           <button onClick={() => setActiveTab('tasks')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'tasks' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><List size={17}/> Tasks Table</button>
           <button onClick={() => setActiveTab('gantt')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'gantt' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><Clock size={17}/> Gantt View</button>
           <button onClick={() => setActiveTab('team')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'team' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><Users size={17}/> Team</button>
         </nav>
+
         <div className="pt-4 border-t border-white/10 space-y-2">
           <button onClick={handleExport} className="w-full flex items-center justify-center gap-2 text-xs font-black bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-500 transition-all"><Download size={14}/> EXPORT EXCEL</button>
           <label className="w-full flex items-center justify-center gap-2 text-xs font-black bg-slate-800 text-slate-400 p-3 rounded-xl cursor-pointer hover:bg-slate-700 transition-all border border-white/5"><Upload size={14}/> IMPORT EXCEL<input type="file" className="hidden" onChange={handleImport}/></label>
@@ -107,6 +111,13 @@ const Dashboard = () => {
       </aside>
 
       <main className="flex-1 overflow-y-auto p-8">
+        {activeTab === 'dashboard' && (
+          <div className="grid grid-cols-2 gap-8 h-80">
+            <div className="bg-white p-6 rounded-3xl shadow-sm border"><h3 className="text-xs font-black text-slate-400 mb-4 uppercase">Team Workload</h3><ResponsiveContainer width="100%" height="100%"><BarChart data={team.map(m => ({ name: m.name, count: data.filter(d => d.person?.includes(m.name)).length }))}><XAxis dataKey="name" fontSize={10}/><Tooltip/><Bar dataKey="count" fill="#6366f1" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>
+            <div className="bg-white p-6 rounded-3xl shadow-sm border"><h3 className="text-xs font-black text-slate-400 mb-4 uppercase">Overall Progress</h3><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{name:'Done', value: data.filter(d=>d.progress==100).length}, {name:'Open', value: data.filter(d=>d.progress<100).length}]} innerRadius={50} outerRadius={70} dataKey="value"><Cell fill="#10b981"/><Cell fill="#6366f1"/></Pie><Tooltip/></PieChart></ResponsiveContainer></div>
+          </div>
+        )}
+
         {activeTab === 'tasks' && (
           <div className="bg-white rounded-[1.5rem] shadow-sm border overflow-hidden">
             <table className="w-full text-left">
@@ -160,14 +171,17 @@ const Dashboard = () => {
                 {/* TODAY LINE */}
                 {(() => {
                   const today = new Date();
-                  const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
-                  const leftPos = 200 + (diffDays * 40 * zoomScale);
-                  return (
-                    <div className="absolute top-0 bottom-0 z-40 pointer-events-none border-l-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]"
-                         style={{ left: `${leftPos}px` }}>
-                      <div className="bg-red-500 text-white text-[7px] font-black px-1 py-0.5 rounded-b absolute top-[36px] left-[-1px] whitespace-nowrap uppercase">Today</div>
-                    </div>
-                  );
+                  if (today >= projectRange.start && today <= projectRange.end) {
+                    const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
+                    const leftPos = 200 + (diffDays * 40 * zoomScale);
+                    return (
+                      <div className="absolute top-0 bottom-0 z-40 pointer-events-none border-l-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]"
+                           style={{ left: `${leftPos}px` }}>
+                        <div className="bg-red-500 text-white text-[7px] font-black px-1 py-0.5 rounded-b absolute top-[36px] left-[-1px] whitespace-nowrap uppercase">Today</div>
+                      </div>
+                    );
+                  }
+                  return null;
                 })()}
 
                 {/* Content Rows */}
@@ -212,14 +226,6 @@ const Dashboard = () => {
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Dashboard and Team Setup tabs remain consistent */}
-        {activeTab === 'dashboard' && (
-          <div className="grid grid-cols-2 gap-8 h-80">
-            <div className="bg-white p-6 rounded-3xl shadow-sm border"><h3 className="text-xs font-black text-slate-400 mb-4 uppercase">Team Workload</h3><ResponsiveContainer width="100%" height="100%"><BarChart data={team.map(m => ({ name: m.name, count: data.filter(d => d.person?.includes(m.name)).length }))}><XAxis dataKey="name" fontSize={10}/><Tooltip/><Bar dataKey="count" fill="#6366f1" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>
-            <div className="bg-white p-6 rounded-3xl shadow-sm border"><h3 className="text-xs font-black text-slate-400 mb-4 uppercase">Overall Progress</h3><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{name:'Done', value: data.filter(d=>d.progress==100).length}, {name:'Open', value: data.filter(d=>d.progress<100).length}]} innerRadius={50} outerRadius={70} dataKey="value"><Cell fill="#10b981"/><Cell fill="#6366f1"/></Pie><Tooltip/></PieChart></ResponsiveContainer></div>
           </div>
         )}
 
