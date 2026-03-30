@@ -1,15 +1,16 @@
 /* PROJECTPRO MANAGEMENT SUITE 
-   Version: 10.5 
-   Changes: CSV Import/Export & Team Roles Visibility
+   Version: 10.8 
+   Fix: Version badge visibility & UI polish
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Upload, LayoutDashboard, Clock, List, Download, Trash2, Plus, ZoomIn, ZoomOut, Users, Activity, ShieldCheck } from 'lucide-react';
+import { Upload, LayoutDashboard, Clock, List, Download, Trash2, Plus, ZoomIn, ZoomOut, Users, Activity, ShieldCheck, Moon, Sun } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('tasks');
+  const [isDarkMode, setIsDarkMode] = useState(() => JSON.parse(localStorage.getItem('dark_mode')) || false);
   const [team, setTeam] = useState(() => JSON.parse(localStorage.getItem('project_team')) || []);
   const [data, setData] = useState(() => JSON.parse(localStorage.getItem('project_tasks')) || []);
   const [zoomScale, setZoomScale] = useState(1);
@@ -19,7 +20,8 @@ const Dashboard = () => {
   useEffect(() => {
     localStorage.setItem('project_tasks', JSON.stringify(data));
     localStorage.setItem('project_team', JSON.stringify(team));
-  }, [data, team]);
+    localStorage.setItem('dark_mode', JSON.stringify(isDarkMode));
+  }, [data, team, isDarkMode]);
 
   const safeDate = (d) => { 
     const date = new Date(d); 
@@ -28,10 +30,10 @@ const Dashboard = () => {
 
   const projectRange = useMemo(() => {
     const today = new Date();
+    today.setHours(0,0,0,0);
     const start = new Date(today);
     start.setDate(today.getDate() - 7);
     start.setDate(start.getDate() - start.getDay());
-
     let end = new Date(today);
     end.setDate(end.getDate() + 60);
     if (data.length > 0) {
@@ -46,7 +48,7 @@ const Dashboard = () => {
       const today = new Date();
       const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
       const scrollPos = (diffDays * 40 * zoomScale);
-      ganttContainerRef.current.scrollLeft = scrollPos - 100;
+      ganttContainerRef.current.scrollLeft = scrollPos - 200;
     }
   }, [activeTab, zoomScale, projectRange.start]);
 
@@ -65,162 +67,197 @@ const Dashboard = () => {
     setData(data.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
 
-  // --- CSV EXPORT LOGIC ---
   const handleExportCSV = () => {
-    if (data.length === 0) return alert("No data to export");
     const worksheet = XLSX.utils.json_to_sheet(data);
     const csvContent = XLSX.utils.sheet_to_csv(worksheet);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", "ProjectPro_Tasks_v10.5.csv");
-    document.body.appendChild(link);
+    link.setAttribute("download", "ProjectPro_v10.8.csv");
     link.click();
-    document.body.removeChild(link);
   };
 
-  // --- CSV IMPORT LOGIC ---
   const handleImportCSV = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const content = evt.target.result;
-      const workbook = XLSX.read(content, { type: 'binary' });
-      const sheetName = workbook.SheetNames[0];
-      const csvData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-      
-      const validatedData = csvData.map((t, i) => ({
-        ...t,
-        id: t.id || Date.now() + i,
-        progress: Number(t.progress) || 0,
-        color: t.color || '#6366f1'
-      }));
-      
-      setData(validatedData);
+      const workbook = XLSX.read(evt.target.result, { type: 'binary' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(sheet);
+      setData(json.map((t, i) => ({ ...t, id: t.id || Date.now() + i, color: t.color || '#6366f1' })));
     };
     reader.readAsBinaryString(file);
   };
 
+  const theme = {
+    bg: isDarkMode ? 'bg-slate-950' : 'bg-slate-50',
+    card: isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200',
+    text: isDarkMode ? 'text-slate-100' : 'text-slate-900',
+    textMuted: isDarkMode ? 'text-slate-400' : 'text-slate-500',
+    border: isDarkMode ? 'border-slate-800' : 'border-slate-100',
+    input: isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-100 text-slate-900'
+  };
+
   return (
-    <div className="flex h-screen bg-slate-50 text-left font-sans overflow-hidden" dir="ltr">
-      <aside className="w-64 bg-slate-900 text-slate-400 p-6 flex flex-col shrink-0 shadow-2xl">
-        <div className="flex items-center gap-3 mb-2 text-white">
-          <div className="bg-indigo-500 p-2 rounded-xl"><Activity size={20}/></div>
-          <h1 className="font-black text-xl italic tracking-tighter uppercase">ProjectPro</h1>
+    <div className={`flex h-screen ${theme.bg} ${theme.text} transition-colors duration-300 font-sans overflow-hidden`} dir="ltr">
+      <aside className="w-64 bg-slate-900 text-slate-400 p-6 flex flex-col shrink-0 shadow-2xl z-50">
+        <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3 text-white">
+                <div className="bg-indigo-500 p-2 rounded-xl"><Activity size={20}/></div>
+                <h1 className="font-black text-xl italic tracking-tighter uppercase">ProjectPro</h1>
+            </div>
+            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+                {isDarkMode ? <Sun size={18} className="text-yellow-400"/> : <Moon size={18} className="text-indigo-400"/>}
+            </button>
         </div>
-        <div className="text-[9px] font-black text-indigo-400 mb-8 bg-indigo-500/10 w-fit px-2 py-0.5 rounded border border-indigo-500/20">VERSION 10.5</div>
+
+        {/* VERSION BADGE - FIXED VISIBILITY */}
+        <div className="mb-8 mt-2">
+            <span className="bg-indigo-500/20 text-indigo-400 text-[10px] font-black px-2.5 py-1 rounded-full border border-indigo-500/30 tracking-widest uppercase">
+                v10.8 Stable
+            </span>
+        </div>
         
         <nav className="space-y-1.5 flex-1 font-bold text-sm">
-          <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'dashboard' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><LayoutDashboard size={17}/> Dashboard</button>
-          <button onClick={() => setActiveTab('tasks')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'tasks' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><List size={17}/> Tasks Table</button>
-          <button onClick={() => setActiveTab('gantt')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'gantt' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><Clock size={17}/> Gantt View</button>
-          <button onClick={() => setActiveTab('team')} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl ${activeTab === 'team' ? 'bg-white/10 text-white' : 'hover:bg-white/5'}`}><Users size={17}/> Team</button>
+          {['dashboard', 'tasks', 'gantt', 'team'].map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl capitalize transition-all ${activeTab === tab ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-white/5'}`}>
+              {tab === 'dashboard' && <LayoutDashboard size={17}/>}
+              {tab === 'tasks' && <List size={17}/>}
+              {tab === 'gantt' && <Clock size={17}/>}
+              {tab === 'team' && <Users size={17}/>}
+              {tab}
+            </button>
+          ))}
         </nav>
 
-        <div className="pt-4 border-t border-white/10 space-y-2">
-          <button onClick={handleExportCSV} className="w-full flex items-center justify-center gap-2 text-xs font-black bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-500 transition-all"><Download size={14}/> EXPORT CSV</button>
-          <label className="w-full flex items-center justify-center gap-2 text-xs font-black bg-slate-800 text-slate-400 p-3 rounded-xl cursor-pointer hover:bg-slate-700 transition-all border border-white/5"><Upload size={14}/> IMPORT CSV<input type="file" accept=".csv" className="hidden" onChange={handleImportCSV}/></label>
+        <div className="pt-6 border-t border-white/10 space-y-3">
+          <button onClick={handleExportCSV} className="w-full flex items-center justify-center gap-2 text-[10px] font-black bg-emerald-600 text-white py-3 rounded-xl hover:bg-emerald-500 transition-all uppercase tracking-widest"><Download size={14}/> Export CSV</button>
+          <label className="w-full flex items-center justify-center gap-2 text-[10px] font-black bg-slate-800 text-slate-300 py-3 rounded-xl cursor-pointer hover:bg-slate-700 transition-all border border-white/5 uppercase tracking-widest">
+            <Upload size={14}/> Import CSV
+            <input type="file" accept=".csv" className="hidden" onChange={handleImportCSV}/>
+          </label>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto p-8">
+      <main className="flex-1 overflow-y-auto p-8 relative">
         {activeTab === 'dashboard' && (
           <div className="grid grid-cols-2 gap-8 h-80">
-            <div className="bg-white p-6 rounded-3xl shadow-sm border"><h3 className="text-xs font-black text-slate-400 mb-4 uppercase">Team Workload</h3><ResponsiveContainer width="100%" height="100%"><BarChart data={team.map(m => ({ name: m.name, count: data.filter(d => d.person?.includes(m.name)).length }))}><XAxis dataKey="name" fontSize={10}/><Tooltip/><Bar dataKey="count" fill="#6366f1" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>
-            <div className="bg-white p-6 rounded-3xl shadow-sm border"><h3 className="text-xs font-black text-slate-400 mb-4 uppercase">Overall Progress</h3><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{name:'Done', value: data.filter(d=>d.progress==100).length}, {name:'Open', value: data.filter(d=>d.progress<100).length}]} innerRadius={50} outerRadius={70} dataKey="value"><Cell fill="#10b981"/><Cell fill="#6366f1"/></Pie><Tooltip/></PieChart></ResponsiveContainer></div>
+            <div className={`${theme.card} p-6 rounded-3xl shadow-sm border`}>
+                <h3 className={`text-xs font-black ${theme.textMuted} mb-4 uppercase tracking-tighter`}>Workload</h3>
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={team.map(m => ({ name: m.name, count: data.filter(d => d.person?.includes(m.name)).length }))}>
+                        <XAxis dataKey="name" stroke={isDarkMode ? '#64748b' : '#94a3b8'} fontSize={10} axisLine={false} tickLine={false}/>
+                        <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ backgroundColor: isDarkMode ? '#1e293b' : '#fff', border: 'none', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}/>
+                        <Bar dataKey="count" fill="#6366f1" radius={[6,6,0,0]} barSize={30}/>
+                    </BarChart>
+                </ResponsiveContainer>
+            </div>
+            <div className={`${theme.card} p-6 rounded-3xl shadow-sm border`}>
+                <h3 className={`text-xs font-black ${theme.textMuted} mb-4 uppercase tracking-tighter`}>Project Health</h3>
+                <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                        <Pie data={[{name:'Done', value: data.filter(d=>d.progress==100).length || 1}, {name:'Open', value: data.filter(d=>d.progress<100).length || 1}]} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                            <Cell fill="#10b981" stroke="none"/><Cell fill="#6366f1" stroke="none"/>
+                        </Pie>
+                        <Tooltip contentStyle={{ backgroundColor: isDarkMode ? '#1e293b' : '#fff', border: 'none', borderRadius: '12px' }}/>
+                    </PieChart>
+                </ResponsiveContainer>
+            </div>
           </div>
         )}
 
         {activeTab === 'tasks' && (
-          <div className="bg-white rounded-[1.5rem] shadow-sm border overflow-hidden">
+          <div className={`${theme.card} rounded-3xl shadow-xl border overflow-hidden`}>
             <table className="w-full text-left">
-              <thead className="bg-slate-50 border-b text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <thead className={`${isDarkMode ? 'bg-slate-800/50' : 'bg-slate-50'} border-b ${theme.border} text-[10px] font-black ${theme.textMuted} uppercase tracking-widest`}>
                 <tr><th className="p-4">Project / Task</th><th className="p-4">Team</th><th className="p-4">Dates</th><th className="p-4">Progress</th><th className="p-4 text-center">Delete</th></tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-bold text-xs">
+              <tbody className={`divide-y ${theme.border} font-bold text-xs`}>
                 {data.map(t => (
-                  <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-3"><input className="text-indigo-600 block bg-transparent outline-none mb-0.5 text-[10px]" value={t.project} onChange={e => updateTask(t.id, 'project', e.target.value)} /><input className="text-slate-800 block bg-transparent outline-none w-full font-bold" value={t.task} onChange={e => updateTask(t.id, 'task', e.target.value)} /></td>
-                    <td className="p-3"><div className="flex flex-wrap gap-1">{team.map(m => (<button key={m.name} onClick={() => { const cur = t.person || ""; const up = cur.includes(m.name) ? cur.split(',').filter(p => p.trim() !== m.name).join(',') : (cur ? cur + ',' + m.name : m.name); updateTask(t.id, 'person', up); }} className={`px-1.5 py-0.5 rounded text-[8px] ${t.person?.includes(m.name) ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{m.name}</button>))}</div></td>
-                    <td className="p-3 flex gap-1"><input type="date" className="text-[9px] p-0.5 border rounded" value={t.start} onChange={e => updateTask(t.id, 'start', e.target.value)} /><input type="date" className="text-[9px] p-0.5 border rounded" value={t.end} onChange={e => updateTask(t.id, 'end', e.target.value)} /></td>
-                    <td className="p-3"><div className="flex items-center gap-2"><input type="range" className="w-16 accent-indigo-600" value={t.progress} onChange={e => updateTask(t.id, 'progress', e.target.value)} /> <span className="text-[9px]">{t.progress}%</span></div></td>
-                    <td className="p-3 text-center"><button onClick={() => setData(data.filter(x => x.id !== t.id))} className="text-slate-200 hover:text-red-500"><Trash2 size={14}/></button></td>
+                  <tr key={t.id} className={`${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-50'} transition-colors`}>
+                    <td className="p-3">
+                        <input className="text-indigo-400 block bg-transparent outline-none mb-0.5 text-[10px] uppercase font-black" value={t.project} onChange={e => updateTask(t.id, 'project', e.target.value)} />
+                        <input className={`${theme.text} block bg-transparent outline-none w-full font-bold`} value={t.task} onChange={e => updateTask(t.id, 'task', e.target.value)} />
+                    </td>
+                    <td className="p-3">
+                        <div className="flex flex-wrap gap-1">
+                            {team.map(m => (<button key={m.name} onClick={() => { const cur = t.person || ""; const up = cur.includes(m.name) ? cur.split(',').filter(p => p.trim() !== m.name).join(',') : (cur ? cur + ',' + m.name : m.name); updateTask(t.id, 'person', up); }} className={`px-2 py-0.5 rounded-full text-[8px] transition-all ${t.person?.includes(m.name) ? 'bg-indigo-600 text-white' : isDarkMode ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-400'}`}>{m.name}</button>))}
+                        </div>
+                    </td>
+                    <td className="p-3 flex gap-1">
+                        <input type="date" className={`text-[9px] p-1.5 border rounded-lg ${theme.input}`} value={t.start} onChange={e => updateTask(t.id, 'start', e.target.value)} />
+                        <input type="date" className={`text-[9px] p-1.5 border rounded-lg ${theme.input}`} value={t.end} onChange={e => updateTask(t.id, 'end', e.target.value)} />
+                    </td>
+                    <td className="p-3"><div className="flex items-center gap-2"><input type="range" className="w-16 accent-indigo-600" value={t.progress} onChange={e => updateTask(t.id, 'progress', e.target.value)} /> <span className="text-[9px] tabular-nums">{t.progress}%</span></div></td>
+                    <td className="p-3 text-center"><button onClick={() => setData(data.filter(x => x.id !== t.id))} className="text-slate-500 hover:text-red-500 transition-colors"><Trash2 size={14}/></button></td>
                   </tr>
                 ))}
-                <tr><td colSpan={5} className="p-3 text-center"><button onClick={() => setData([...data, {id: Date.now(), project: 'NEW', task: 'Task', start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0], progress: 0, color: '#6366f1'}])} className="text-[10px] font-black text-indigo-600 flex items-center gap-2 mx-auto"><Plus size={14}/> ADD TASK</button></td></tr>
+                <tr><td colSpan={5} className="p-4 text-center"><button onClick={() => setData([...data, {id: Date.now(), project: 'NEW', task: 'New Task', start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0], progress: 0, color: '#6366f1'}])} className="text-[10px] font-black text-indigo-500 hover:text-indigo-400 flex items-center gap-2 mx-auto uppercase tracking-widest"><Plus size={14}/> Add New Task</button></td></tr>
               </tbody>
             </table>
           </div>
         )}
 
         {activeTab === 'gantt' && (
-          <div className="bg-white rounded-[2rem] shadow-sm border flex flex-col h-full overflow-hidden">
-            <div className="p-4 border-b flex justify-between items-center bg-slate-50/50">
-               <div className="flex bg-white p-1 rounded-lg shadow-sm border scale-90 origin-left">
-                  <button onClick={() => setZoomScale(Math.max(0.3, zoomScale - 0.1))} className="p-1.5 hover:bg-slate-50 rounded-md"><ZoomOut size={16}/></button>
-                  <span className="px-3 py-1 text-[9px] font-black border-x uppercase flex items-center">Scale: {Math.round(zoomScale*100)}%</span>
-                  <button onClick={() => setZoomScale(Math.min(2.5, zoomScale + 0.1))} className="p-1.5 hover:bg-slate-50 rounded-md"><ZoomIn size={16}/></button>
+          <div className={`${theme.card} rounded-[2rem] shadow-xl border flex flex-col h-full overflow-hidden`}>
+            <div className={`p-4 border-b flex justify-between items-center ${isDarkMode ? 'bg-slate-800/50' : 'bg-slate-50/50'}`}>
+               <div className={`flex ${isDarkMode ? 'bg-slate-800' : 'bg-white'} p-1 rounded-xl shadow-sm border ${theme.border} scale-90 origin-left`}>
+                  <button onClick={() => setZoomScale(Math.max(0.3, zoomScale - 0.1))} className={`p-2 rounded-lg ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-50'}`}><ZoomOut size={16}/></button>
+                  <span className={`px-4 py-1 text-[10px] font-black border-x ${theme.border} flex items-center`}>{Math.round(zoomScale*100)}%</span>
+                  <button onClick={() => setZoomScale(Math.min(2.5, zoomScale + 0.1))} className={`p-2 rounded-lg ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-50'}`}><ZoomIn size={16}/></button>
                </div>
-               <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Focusing on Today</div>
+               <div className={`text-[10px] font-black ${theme.textMuted} uppercase tracking-widest`}>Interactive Gantt Chart</div>
             </div>
             <div className="flex-1 overflow-auto relative" ref={ganttContainerRef}>
-              <div style={{ width: `${projectRange.totalDays * 40 * zoomScale}px` }} className="relative">
-                <div className="flex sticky top-0 z-30 bg-white/95 border-b ml-[200px]">
+              <div style={{ width: `${projectRange.totalDays * 40 * zoomScale}px` }} className="relative min-h-full">
+                <div className={`flex sticky top-0 z-40 ${isDarkMode ? 'bg-slate-900/95' : 'bg-white/95'} border-b ${theme.border} ml-[200px]`}>
                   {Array.from({length: Math.ceil(projectRange.totalDays / 7)}).map((_, i) => {
                     const d = new Date(projectRange.start); d.setDate(d.getDate() + (i * 7));
-                    return <div key={i} className="flex-1 text-center py-3 border-r border-slate-50 font-black text-[9px] text-slate-400 uppercase" style={{ minWidth: `${7 * 40 * zoomScale}px` }}>W{i+1} • {d.getDate()}/{d.getMonth()+1}</div>
+                    return <div key={i} className={`flex-1 text-center py-4 border-r ${theme.border} font-black text-[9px] ${theme.textMuted} uppercase`} style={{ minWidth: `${7 * 40 * zoomScale}px` }}>W{i+1} • {d.getDate()}/{d.getMonth()+1}</div>
                   })}
                 </div>
                 <div className="absolute inset-0 ml-[200px] pointer-events-none flex z-0">
                    {Array.from({length: projectRange.totalDays}).map((_, i) => (
-                     <div key={i} className="border-r border-slate-50/30 h-full" style={{ width: `${40 * zoomScale}px` }} />
+                     <div key={i} className={`border-r ${isDarkMode ? 'border-white/5' : 'border-slate-100'} h-full`} style={{ width: `${40 * zoomScale}px` }} />
                    ))}
                 </div>
+                {/* TODAY LINE */}
                 {(() => {
                   const today = new Date();
-                  if (today >= projectRange.start && today <= projectRange.end) {
-                    const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
-                    const leftPos = 200 + (diffDays * 40 * zoomScale);
-                    return (
-                      <div className="absolute top-0 bottom-0 z-40 pointer-events-none border-l-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]" style={{ left: `${leftPos}px` }}>
-                        <div className="bg-red-500 text-white text-[7px] font-black px-1 py-0.5 rounded-b absolute top-[36px] left-[-1px] whitespace-nowrap uppercase">Today</div>
-                      </div>
-                    );
-                  }
-                  return null;
+                  today.setHours(0,0,0,0);
+                  const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
+                  const leftPos = 200 + (diffDays * 40 * zoomScale);
+                  return (
+                    <div className="absolute top-0 bottom-0 z-50 pointer-events-none border-l-2 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)]" style={{ left: `${leftPos}px` }}>
+                      <div className="bg-red-500 text-white text-[8px] font-black px-2 py-1 rounded-full absolute top-[50px] left-1/2 -translate-x-1/2 whitespace-nowrap shadow-lg uppercase">Today</div>
+                    </div>
+                  );
                 })()}
                 <div className="relative z-10">
                   {groupedData.map((group, idx) => (
                     <React.Fragment key={idx}>
-                      <div className="flex items-center border-b bg-indigo-50/20 sticky left-0 z-10">
-                        <div className="w-[200px] shrink-0 p-3 bg-indigo-50/50 border-r sticky left-0 z-30 font-black text-[10px] text-indigo-700 uppercase leading-none">📁 {group.name}</div>
-                        <div className="flex-1 h-8 relative">
-                           <div className="absolute h-1 top-3.5 bg-indigo-300/30 rounded-full" 
-                                style={{ 
-                                  left: `${Math.ceil((safeDate(group.start) - projectRange.start) / (1000*60*60*24)) * 40 * zoomScale}px`, 
-                                  width: `${Math.ceil((safeDate(group.end) - safeDate(group.start)) / (1000*60*60*24)) * 40 * zoomScale}px` 
-                                }} />
-                        </div>
+                      <div className={`flex items-center border-b ${theme.border} ${isDarkMode ? 'bg-indigo-500/10' : 'bg-indigo-50/30'} sticky left-0 z-20`}>
+                        <div className={`w-[200px] shrink-0 p-4 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-indigo-50/50 border-slate-100'} border-r sticky left-0 z-30 font-black text-[10px] text-indigo-500 uppercase`}>📁 {group.name}</div>
+                        <div className="flex-1 h-10 relative" />
                       </div>
                       {group.tasks.map(task => {
                         const start = safeDate(task.start); const end = safeDate(task.end);
                         const left = Math.ceil((start - projectRange.start) / (1000*60*60*24)) * 40 * zoomScale;
                         const w = Math.ceil((end - start) / (1000*60*60*24)) * 40 * zoomScale;
                         return (
-                          <div key={task.id} className="flex items-center border-b group hover:bg-slate-50/30 transition-colors">
-                            <div className="w-[200px] shrink-0 p-3 bg-white border-r sticky left-0 z-30 flex items-center gap-2 shadow-[2px_0_5px_rgba(0,0,0,0.01)]">
-                               <input type="color" value={task.color} onChange={e => updateTask(task.id, 'color', e.target.value)} className="w-3 h-3 rounded-full border-none cursor-pointer" />
-                               <div className="truncate leading-tight"><p className="text-[10px] font-black text-slate-700 uppercase tracking-tighter">{task.task}</p><p className="text-[7px] font-bold text-slate-400">👤 {task.person || 'N/A'}</p></div>
-                            </div>
-                            <div className="flex-1 h-10 relative">
-                               <div className="absolute h-5 top-2.5 rounded-lg shadow-sm flex items-center px-2 text-[8px] text-white font-black overflow-hidden" style={{ left: `${left}px`, width: `${w}px`, backgroundColor: task.color }}>
-                                 <div className="absolute inset-0 bg-black/10" style={{ width: `${task.progress}%` }} />
-                                 <span className="relative z-10">{task.progress}%</span>
+                          <div key={task.id} className={`flex items-center border-b ${theme.border} group transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-50'}`}>
+                            <div className={`w-[200px] shrink-0 p-4 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'} border-r sticky left-0 z-30 flex items-center gap-3 shadow-md`}>
+                               <input type="color" value={task.color} onChange={e => updateTask(task.id, 'color', e.target.value)} className="w-4 h-4 rounded-full border-none cursor-pointer bg-transparent" />
+                               <div className="truncate">
+                                   <p className={`text-[10px] font-black ${theme.text} uppercase leading-tight`}>{task.task}</p>
+                                   <p className={`text-[8px] font-bold ${theme.textMuted} uppercase`}>👤 {task.person || 'Unassigned'}</p>
                                </div>
-                               <div className="absolute top-2.5 flex flex-col items-center" style={{ left: `${left + w}px`, transform: 'translateX(-50%)' }}>
-                                  <div className="w-2.5 h-2.5 rotate-45 border border-white shadow-sm" style={{ backgroundColor: task.color }} />
-                                  <span className="text-[7px] font-black text-slate-400 mt-5 bg-white/90 px-0.5 rounded">{end.getDate()}/{end.getMonth()+1}</span>
+                            </div>
+                            <div className="flex-1 h-12 relative">
+                               <div className="absolute h-6 top-3 rounded-full shadow-lg flex items-center px-3 text-[9px] text-white font-black overflow-hidden group-hover:scale-[1.02] transition-transform" style={{ left: `${left}px`, width: `${Math.max(w, 40)}px`, backgroundColor: task.color }}>
+                                 <div className="absolute inset-0 bg-black/20" style={{ width: `${task.progress}%` }} />
+                                 <span className="relative z-10 drop-shadow-md">{task.progress}%</span>
                                </div>
                             </div>
                           </div>
@@ -235,26 +272,26 @@ const Dashboard = () => {
         )}
 
         {activeTab === 'team' && (
-           <div className="max-w-2xl bg-white p-8 rounded-[2rem] shadow-sm border">
-              <h2 className="text-xl font-black mb-6 italic tracking-tighter uppercase flex items-center gap-2">
-                <ShieldCheck className="text-indigo-600" size={24}/> Team Management
+           <div className={`max-w-3xl ${theme.card} p-10 rounded-[2.5rem] shadow-2xl border mx-auto`}>
+              <h2 className="text-2xl font-black mb-8 italic tracking-tighter uppercase flex items-center gap-3">
+                <ShieldCheck className="text-indigo-500" size={32}/> Team Directory
               </h2>
-              <div className="flex gap-2 mb-8">
-                <input placeholder="Name" className="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-sm font-bold" value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} />
-                <input placeholder="Role (e.g. Developer)" className="flex-1 p-3 bg-slate-50 rounded-xl outline-none border border-slate-100 text-sm font-bold" value={newMember.role} onChange={e => setNewMember({...newMember, role: e.target.value})} />
-                <button onClick={() => {if(newMember.name) setTeam([...team, newMember]); setNewMember({name:'', role:''})}} className="bg-indigo-600 text-white px-8 rounded-xl font-black hover:bg-indigo-700 transition-all text-xs uppercase">Add Member</button>
+              <div className="flex gap-3 mb-10">
+                <input placeholder="Full Name" className={`flex-1 p-4 rounded-2xl outline-none border text-sm font-bold ${theme.input}`} value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} />
+                <input placeholder="Job Role" className={`flex-1 p-4 rounded-2xl outline-none border text-sm font-bold ${theme.input}`} value={newMember.role} onChange={e => setNewMember({...newMember, role: e.target.value})} />
+                <button onClick={() => {if(newMember.name) setTeam([...team, newMember]); setNewMember({name:'', role:''})}} className="bg-indigo-600 text-white px-10 rounded-2xl font-black hover:bg-indigo-700 transition-all text-xs uppercase tracking-widest shadow-lg shadow-indigo-500/30">Add Member</button>
               </div>
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-2 gap-4">
                 {team.map((m, i) => (
-                  <div key={i} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-200 transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center font-black text-xs uppercase">{m.name.charAt(0)}</div>
+                  <div key={i} className={`flex justify-between items-center p-5 ${isDarkMode ? 'bg-slate-800/40' : 'bg-slate-50'} rounded-3xl border ${theme.border} group`}>
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-indigo-500 text-white rounded-2xl flex items-center justify-center font-black text-lg shadow-inner">{m.name.charAt(0)}</div>
                       <div>
-                        <p className="font-black text-sm text-slate-800 uppercase leading-none mb-1">{m.name}</p>
-                        <p className="text-[10px] font-bold text-indigo-500/70 uppercase tracking-widest">{m.role || 'No Role Assigned'}</p>
+                        <p className={`font-black text-sm ${theme.text} uppercase mb-0.5`}>{m.name}</p>
+                        <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest opacity-80">{m.role || 'Contributor'}</p>
                       </div>
                     </div>
-                    <button onClick={() => setTeam(team.filter((_, idx) => idx !== i))} className="text-slate-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={16}/></button>
+                    <button onClick={() => setTeam(team.filter((_, idx) => idx !== i))} className="text-slate-500 hover:text-red-500 p-2 transition-colors"><Trash2 size={18}/></button>
                   </div>
                 ))}
               </div>
