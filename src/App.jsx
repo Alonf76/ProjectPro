@@ -1,11 +1,11 @@
 /* PROJECTPRO MANAGEMENT SUITE 
-   Version: 11.8 
-   Fixes: Smart Text Direction (Auto RTL/LTR) & Bulletproof Hyperlinks
+   Version: 12.0 - The "Ultimate Workspace" Update
+   Features: Gantt-Note Integration, Search, Pinning, Smart Bi-Di Editor
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Upload, LayoutDashboard, Clock, List, Download, Trash2, Plus, ZoomIn, ZoomOut, Users, Activity, ShieldCheck, Moon, Sun, StickyNote, CheckCircle, RotateCcw, CornerDownRight, Bold, ListOrdered, Link as LinkIcon, Palette, Indent, Outdent } from 'lucide-react';
+import { Upload, LayoutDashboard, Clock, List, Download, Trash2, Plus, ZoomIn, ZoomOut, Users, Activity, ShieldCheck, Moon, Sun, StickyNote, CheckCircle, RotateCcw, CornerDownRight, Bold, ListOrdered, Link as LinkIcon, Palette, Indent, Outdent, Pin, Search, ExternalLink } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const Dashboard = () => {
@@ -14,6 +14,7 @@ const Dashboard = () => {
   const [team, setTeam] = useState(() => JSON.parse(localStorage.getItem('project_team')) || []);
   const [data, setData] = useState(() => JSON.parse(localStorage.getItem('project_tasks')) || []);
   const [notes, setNotes] = useState(() => JSON.parse(localStorage.getItem('project_notes')) || []);
+  const [searchTerm, setSearchTerm] = useState('');
   const [zoomScale, setZoomScale] = useState(1);
   const ganttContainerRef = useRef(null);
 
@@ -24,70 +25,100 @@ const Dashboard = () => {
     localStorage.setItem('dark_mode', JSON.stringify(isDarkMode));
   }, [data, team, notes, isDarkMode]);
 
-  // פקודות עריכה
-  const execCmd = (cmd, value = null) => {
-    document.execCommand(cmd, false, value);
-  };
+  const safeDate = (d) => { const date = new Date(d); return isNaN(date) ? new Date() : date; };
 
-  // פונקציית לינק משופרת - מזריקה HTML נקי
-  const insertHyperlink = () => {
-    const url = prompt("Enter URL (e.g. https://google.com):");
+  const projectRange = useMemo(() => {
+    const today = new Date(); today.setHours(0,0,0,0);
+    let start = new Date(today); start.setDate(today.getDate() - 21);
+    if (data.length > 0) {
+      const minDate = new Date(Math.min(...data.map(d => safeDate(d.start).getTime())));
+      if (minDate < start) start = new Date(minDate.getTime() - (7 * 24 * 60 * 60 * 1000));
+    }
+    let end = new Date(today); end.setDate(end.getDate() + 90);
+    return { start, end, totalDays: Math.ceil((end - start) / (1000 * 60 * 60 * 24)) };
+  }, [data]);
+
+  useEffect(() => {
+    if (activeTab === 'gantt' && ganttContainerRef.current) {
+      const today = new Date();
+      const oneWeekAgo = new Date(today.setDate(today.getDate() - 7));
+      const diffDays = (oneWeekAgo - projectRange.start) / (1000 * 60 * 60 * 24);
+      ganttContainerRef.current.scrollLeft = (diffDays * 40 * zoomScale);
+    }
+  }, [activeTab, zoomScale, projectRange.start]);
+
+  const groupedData = useMemo(() => {
+    const groups = {};
+    data.forEach(task => {
+      if (!groups[task.project]) groups[task.project] = { name: task.project, tasks: [] };
+      groups[task.project].tasks.push(task);
+    });
+    return Object.values(groups);
+  }, [data]);
+
+  // --- ACTIONS ---
+  const execCmd = (cmd, value = null) => document.execCommand(cmd, false, value);
+  
+  const insertLink = () => {
+    const url = prompt("כתובת האתר (URL):", "https://");
     if (!url) return;
-    const text = prompt("Enter text to display:", url);
+    const text = prompt("טקסט להצגה:", "לינק");
     if (!text) return;
-    
-    // יצירת אלמנט לינק מעוצב
-    const linkHTML = `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline; font-weight: 700;">${text}</a>&nbsp;`;
-    execCmd('insertHTML', linkHTML);
+    const html = `<a href="${url}" target="_blank" style="color:#4f46e5; font-weight:bold; text-decoration:underline;">${text}</a>&nbsp;`;
+    execCmd('insertHTML', html);
   };
 
   const addNote = (parentId = null) => {
     const newNote = {
       id: Date.now(),
-      parentId: parentId,
+      parentId,
       title: parentId ? 'Follow-up' : 'New Note',
-      content: '<div>• Start typing here...</div>',
+      content: '<div></div>',
       date: new Date().toLocaleString('he-IL'),
-      color: parentId ? (isDarkMode ? '#1e293b' : '#f8fafb') : (isDarkMode ? '#1e1b4b' : '#fefcbf'),
-      textColor: isDarkMode ? '#f1f5f9' : '#1e293b',
+      color: isDarkMode ? '#1e1b4b' : '#fefcbf',
       isClosed: false,
+      isPinned: false,
+      linkedTaskId: null
     };
     setNotes([newNote, ...notes]);
   };
 
   const updateNote = (id, field, value) => setNotes(notes.map(n => n.id === id ? { ...n, [field]: value } : n));
-  const deleteNote = (id) => setNotes(notes.filter(n => n.id !== id));
+
+  const filteredNotes = useMemo(() => {
+    let list = notes.filter(n => 
+      !n.parentId && 
+      (n.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+       n.content.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+    return list.sort((a, b) => (b.isPinned - a.isPinned));
+  }, [notes, searchTerm]);
 
   const theme = {
     bg: isDarkMode ? 'bg-slate-950' : 'bg-slate-50',
     sidebar: isDarkMode ? 'bg-slate-900/80 backdrop-blur-2xl border-white/5' : 'bg-white/60 backdrop-blur-2xl border-white/40',
-    card: isDarkMode ? 'bg-slate-900/60 backdrop-blur-xl border-white/5' : 'bg-white/50 backdrop-blur-xl border-white/60',
+    card: isDarkMode ? 'bg-slate-900/40 backdrop-blur-xl border-white/5 shadow-2xl' : 'bg-white/50 backdrop-blur-xl border-white/60 shadow-xl',
     text: isDarkMode ? 'text-slate-100' : 'text-slate-900',
     border: isDarkMode ? 'border-white/10' : 'border-white/40',
+    input: isDarkMode ? 'bg-slate-800/50 border-white/10' : 'bg-white/60 border-white/40'
   };
 
   return (
     <div className={`flex h-screen ${theme.bg} ${theme.text} transition-all duration-700 font-sans overflow-hidden relative`} dir="ltr">
       
-      {/* Background decoration */}
-      <div className="absolute top-[-5%] left-[-5%] w-[30%] h-[30%] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
-
       {/* Sidebar */}
-      <aside className={`w-64 ${theme.sidebar} p-6 flex flex-col shrink-0 border-r z-50 shadow-2xl`}>
+      <aside className={`w-64 ${theme.sidebar} p-6 flex flex-col shrink-0 border-r z-50`}>
         <div className="flex items-center justify-between mb-8">
-            <div className={`flex items-center gap-3 ${isDarkMode ? 'text-white' : 'text-indigo-950'}`}>
-                <div className="bg-indigo-600 p-2 rounded-xl shadow-lg"><Activity size={20}/></div>
-                <h1 className="font-black text-xl italic tracking-tighter uppercase">ProjectPro</h1>
+            <div className="flex items-center gap-3">
+                <div className="bg-indigo-600 p-2 rounded-xl"><Activity size={20} className="text-white"/></div>
+                <h1 className="font-black text-xl uppercase tracking-tighter italic">ProjectPro</h1>
             </div>
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-lg hover:bg-black/10 transition-colors">
-                {isDarkMode ? <Sun size={18} className="text-yellow-400"/> : <Moon size={18} className="text-indigo-600"/>}
-            </button>
+            <button onClick={() => setIsDarkMode(!isDarkMode)}>{isDarkMode ? <Sun className="text-yellow-400"/> : <Moon className="text-indigo-600"/>}</button>
         </div>
-        <div className="mb-6"><span className="bg-indigo-600/20 text-indigo-500 text-[10px] font-black px-3 py-1 rounded-full border border-indigo-500/30 tracking-widest uppercase">v11.8 Smart Notes</span></div>
-
+        <div className="mb-6"><span className="bg-indigo-600/20 text-indigo-500 text-[10px] font-black px-3 py-1 rounded-full border border-indigo-500/30 uppercase">v12.0 Pro</span></div>
         <nav className="space-y-1.5 flex-1 font-bold text-sm">
           {['dashboard', 'tasks', 'gantt', 'team', 'notes'].map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl capitalize transition-all ${activeTab === tab ? 'bg-indigo-600 text-white shadow-xl' : 'hover:bg-indigo-600/10 hover:text-indigo-600'}`}>
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl capitalize transition-all ${activeTab === tab ? 'bg-indigo-600 text-white shadow-xl' : 'hover:bg-indigo-600/10'}`}>
               {tab === 'notes' && <StickyNote size={17}/>} {tab === 'gantt' && <Clock size={17}/>} {tab}
             </button>
           ))}
@@ -95,88 +126,143 @@ const Dashboard = () => {
       </aside>
 
       <main className="flex-1 overflow-y-auto p-10 relative z-10">
+        
+        {/* --- NOTES TAB --- */}
         {activeTab === 'notes' && (
-          <div className="space-y-8 max-w-6xl mx-auto">
-            <div className="flex justify-between items-center">
-              <h2 className="text-3xl font-black italic uppercase tracking-tighter text-indigo-600">Smart Workspace</h2>
-              <button onClick={() => addNote()} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center gap-2 hover:bg-indigo-700 transition-all">
+          <div className="space-y-8">
+            <div className="flex justify-between items-center bg-white/10 p-4 rounded-[2rem] backdrop-blur-md border border-white/10">
+              <div className="relative w-96">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+                <input 
+                  placeholder="חיפוש בפתקים..." 
+                  className={`w-full pl-12 pr-4 py-3 rounded-2xl outline-none border transition-all ${theme.input}`}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <button onClick={() => addNote()} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-indigo-700 transition-all flex items-center gap-2">
                 <Plus size={18}/> New Note
               </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-              {notes.filter(n => !n.parentId).map(note => (
-                <div key={note.id} className="space-y-6">
-                  {/* MAIN NOTE */}
-                  <div className={`${theme.card} p-8 rounded-[3rem] border-2 relative group transition-all shadow-2xl ${note.isClosed ? 'opacity-30' : ''}`} style={{ backgroundColor: note.isClosed ? '' : note.color }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+              {filteredNotes.map(note => (
+                <div key={note.id} className="space-y-4">
+                  <div className={`${theme.card} p-8 rounded-[3rem] border-2 group transition-all relative ${note.isClosed ? 'opacity-40 grayscale' : ''}`} style={{ backgroundColor: note.isClosed ? '' : note.color }}>
                     
-                    {/* TOOLBAR */}
-                    <div className="flex gap-2 mb-6 p-2 bg-black/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity border border-black/5">
-                        <button title="Bold" onClick={() => execCmd('bold')} className="p-2 hover:bg-black/10 rounded-lg"><Bold size={16}/></button>
-                        <button title="List" onClick={() => execCmd('insertUnorderedList')} className="p-2 hover:bg-black/10 rounded-lg"><ListOrdered size={16}/></button>
-                        <button title="Add Link" onClick={insertHyperlink} className="p-2 hover:bg-black/10 rounded-lg"><LinkIcon size={16}/></button>
-                        <button title="Indent" onClick={() => execCmd('indent')} className="p-2 hover:bg-black/10 rounded-lg"><Indent size={16}/></button>
-                        <button title="Outdent" onClick={() => execCmd('outdent')} className="p-2 hover:bg-black/10 rounded-lg"><Outdent size={16}/></button>
-                        <div className="w-px h-6 bg-black/10 mx-1" />
-                        <button title="Color" onClick={() => {const c = prompt('Color?'); if(c) execCmd('foreColor', c)}} className="p-2 hover:bg-black/10 rounded-lg"><Palette size={16}/></button>
+                    {/* Toolbar */}
+                    <div className="flex gap-2 mb-4 p-2 bg-black/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => execCmd('bold')}><Bold size={16}/></button>
+                      <button onClick={() => execCmd('insertUnorderedList')}><ListOrdered size={16}/></button>
+                      <button onClick={insertLink}><LinkIcon size={16}/></button>
+                      <button onClick={() => execCmd('indent')}><Indent size={16}/></button>
+                      <button onClick={() => updateNote(note.id, 'isPinned', !note.isPinned)} className={note.isPinned ? 'text-indigo-600' : ''}><Pin size={16}/></button>
                     </div>
 
-                    <div className="flex justify-between items-start mb-6">
+                    <div className="flex justify-between mb-4">
                       <input 
-                        className="bg-transparent font-black uppercase text-lg outline-none w-full" 
+                        className="bg-transparent font-black text-lg outline-none w-full uppercase" 
                         value={note.title} 
-                        onChange={(e) => updateNote(note.id, 'title', e.target.value)}
-                        style={{ color: note.textColor }}
+                        onChange={(e) => updateNote(note.id, 'title', e.target.value)} 
                       />
-                      <div className="flex gap-2">
-                        <button onClick={() => updateNote(note.id, 'isClosed', !note.isClosed)} className="p-1 hover:scale-110 transition-transform">{note.isClosed ? <RotateCcw size={20}/> : <CheckCircle size={20} className="text-emerald-600"/>}</button>
-                        <button onClick={() => deleteNote(note.id)} className="p-1 hover:scale-110 transition-transform text-red-500"><Trash2 size={20}/></button>
-                      </div>
+                      <select 
+                        className="bg-transparent text-[10px] font-bold outline-none max-w-[100px] border-none"
+                        value={note.linkedTaskId || ''}
+                        onChange={(e) => updateNote(note.id, 'linkedTaskId', e.target.value)}
+                      >
+                        <option value="">קישור למשימה...</option>
+                        {data.map(t => <option key={t.id} value={t.id}>{t.task}</option>)}
+                      </select>
                     </div>
-                    
-                    {/* EDITABLE AREA with Auto-Direction */}
+
                     <div 
-                      className="min-h-[200px] text-sm outline-none font-medium leading-relaxed prose prose-indigo max-w-none text-start"
-                      style={{ unicodeBidi: 'plaintext', textAlign: 'initial', color: note.textColor }}
+                      className="min-h-[150px] text-sm outline-none font-medium prose prose-indigo max-w-none"
                       contentEditable
                       suppressContentEditableWarning
                       onBlur={(e) => updateNote(note.id, 'content', e.currentTarget.innerHTML)}
                       dangerouslySetInnerHTML={{ __html: note.content }}
+                      style={{ direction: 'auto', textAlign: 'start' }}
                     />
 
-                    <div className="flex justify-between items-center mt-8 pt-6 border-t border-black/5">
-                      <span className="text-[10px] font-black opacity-30 uppercase">{note.date}</span>
-                      <div className="flex gap-4">
-                        <input type="color" className="w-6 h-6 rounded-full border-2 border-white/50 cursor-pointer shadow-sm" value={note.color} onChange={(e) => updateNote(note.id, 'color', e.target.value)} />
-                        <button onClick={() => addNote(note.id)} className="text-[10px] font-black bg-indigo-600 text-white px-5 py-2 rounded-2xl uppercase flex items-center gap-2 shadow-lg hover:bg-indigo-700 transition-all"><CornerDownRight size={14}/> Follow-up</button>
+                    <div className="mt-6 pt-4 border-t border-black/5 flex justify-between items-center">
+                      <span className="text-[10px] font-black opacity-30">{note.date}</span>
+                      <div className="flex gap-2">
+                        <input type="color" value={note.color} onChange={(e) => updateNote(note.id, 'color', e.target.value)} className="w-6 h-6 rounded-full border-2 border-white cursor-pointer" />
+                        <button onClick={() => updateNote(note.id, 'isClosed', !note.isClosed)} className="p-2">{note.isClosed ? <RotateCcw size={18}/> : <CheckCircle size={18} className="text-emerald-600"/>}</button>
+                        <button onClick={() => addNote(note.id)} className="bg-indigo-600 text-white px-4 py-1.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-1"><CornerDownRight size={12}/> Sub-task</button>
                       </div>
                     </div>
                   </div>
 
-                  {/* CHILD NOTES */}
-                  {notes.filter(child => child.parentId === note.id).map(child => (
-                    <div key={child.id} className="ml-16 relative">
-                      <div className="absolute left-[-32px] top-8 text-indigo-400"><CornerDownRight size={24}/></div>
-                      <div className={`${theme.card} p-6 rounded-[2.5rem] border shadow-xl ${child.isClosed ? 'opacity-30' : ''}`} style={{ backgroundColor: child.color }}>
-                        <input className="bg-transparent font-black w-full outline-none mb-3 text-xs uppercase" value={child.title} onChange={(e) => updateNote(child.id, 'title', e.target.value)} />
-                        <div 
-                          className="outline-none min-h-[80px] text-[12px] leading-relaxed"
-                          style={{ unicodeBidi: 'plaintext', textAlign: 'initial' }}
-                          contentEditable
-                          suppressContentEditableWarning
-                          onBlur={(e) => updateNote(child.id, 'content', e.currentTarget.innerHTML)}
-                          dangerouslySetInnerHTML={{ __html: child.content }}
-                        />
-                        <div className="flex justify-between mt-5 pt-3 border-t border-black/5 opacity-30 text-[9px] font-black uppercase">
-                           <span>{child.date}</span>
-                           <button onClick={() => deleteNote(child.id)} className="text-red-600 hover:scale-125 transition-transform"><Trash2 size={16}/></button>
-                        </div>
+                  {/* Child Notes Rendering Logic */}
+                  {notes.filter(c => c.parentId === note.id).map(child => (
+                    <div key={child.id} className="ml-16 border-l-2 border-indigo-200 pl-6">
+                      <div className={`${theme.card} p-4 rounded-2xl text-xs bg-white/30`} style={{ direction: 'auto' }}>
+                         <div contentEditable dangerouslySetInnerHTML={{ __html: child.content }} onBlur={(e) => updateNote(child.id, 'content', e.currentTarget.innerHTML)} className="outline-none" />
                       </div>
                     </div>
                   ))}
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* --- GANTT TAB WITH NOTE INTEGRATION --- */}
+        {activeTab === 'gantt' && (
+          <div className={`${theme.card} rounded-[3rem] border flex flex-col h-full overflow-hidden shadow-2xl`}>
+             <div className="flex-1 overflow-auto relative" ref={ganttContainerRef}>
+               <div style={{ width: `${projectRange.totalDays * 40 * zoomScale}px` }} className="relative min-h-full">
+                 <div className={`flex sticky top-0 z-40 ${isDarkMode ? 'bg-slate-950/60' : 'bg-white/60'} backdrop-blur-md border-b ${theme.border} ml-[200px]`}>
+                   {Array.from({length: Math.ceil(projectRange.totalDays / 7)}).map((_, i) => {
+                     const d = new Date(projectRange.start); d.setDate(d.getDate() + (i * 7));
+                     return <div key={i} className="flex-1 text-center py-4 border-r border-white/10 font-bold text-[9px] uppercase" style={{ minWidth: `${7 * 40 * zoomScale}px` }}>W{i+1} • {d.getDate()}/{d.getMonth()+1}</div>
+                   })}
+                 </div>
+
+                 {/* TODAY LINE */}
+                 {(() => {
+                   const today = new Date(); today.setHours(0,0,0,0);
+                   const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
+                   return <div className="absolute top-0 bottom-0 z-[100] border-l-2 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.8)]" style={{ left: `${200 + (diffDays * 40 * zoomScale)}px` }}><div className="bg-red-500 text-white text-[8px] font-black px-2 py-1 rounded-full absolute top-10 -left-4">TODAY</div></div>;
+                 })()}
+
+                 <div className="relative z-10">
+                   {groupedData.map((group, idx) => (
+                    <React.Fragment key={idx}>
+                      <div className="flex items-center border-b ${theme.border} bg-indigo-500/5"><div className="w-[200px] shrink-0 p-4 border-r font-black text-[10px] text-indigo-500 uppercase sticky left-0 z-30 bg-inherit">📁 {group.name}</div><div className="flex-1 h-10" /></div>
+                      {group.tasks.map(task => {
+                        const start = safeDate(task.start); const end = safeDate(task.end);
+                        const left = Math.ceil((start - projectRange.start) / (1000*60*60*24)) * 40 * zoomScale;
+                        const w = Math.ceil((end - start) / (1000*60*60*24)) * 40 * zoomScale;
+                        const hasNote = notes.find(n => n.linkedTaskId == task.id);
+                        return (
+                          <div key={task.id} className="flex items-center border-b transition-colors hover:bg-white/5">
+                            <div className="w-[200px] shrink-0 p-4 border-r sticky left-0 z-30 bg-inherit flex items-center gap-2">
+                               <input type="color" value={task.color} readOnly className="w-3 h-3 rounded-full border-none" />
+                               <span className="text-[10px] font-black uppercase truncate">{task.task}</span>
+                            </div>
+                            <div className="flex-1 h-14 relative">
+                               <div className="absolute h-7 top-3.5 rounded-full flex items-center px-3 text-[9px] text-white font-black overflow-hidden shadow-lg transition-transform hover:scale-[1.02]" 
+                                    style={{ left: `${left}px`, width: `${Math.max(w, 40)}px`, backgroundColor: task.color }}>
+                                 <div className="absolute inset-0 bg-black/20" style={{ width: `${task.progress}%` }} />
+                                 <span className="relative z-10">{task.progress}%</span>
+                                 {/* ICON INDICATOR ON BAR */}
+                                 {hasNote && <div title={hasNote.title} className="absolute right-2 text-white/80 animate-bounce"><StickyNote size={12}/></div>}
+                               </div>
+                               <div className="absolute top-3.5 flex flex-col items-center" style={{ left: `${left + w}px`, transform: 'translateX(-50%)' }}>
+                                  <div className="w-3 h-3 rotate-45 border-2 border-white shadow-md" style={{ backgroundColor: task.color }} />
+                                  <span className="text-[8px] font-black mt-5 px-1 rounded bg-white/20">{end.getDate()}/{end.getMonth()+1}</span>
+                               </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </React.Fragment>
+                   ))}
+                 </div>
+               </div>
+             </div>
           </div>
         )}
       </main>
