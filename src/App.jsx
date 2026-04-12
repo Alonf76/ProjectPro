@@ -1,6 +1,6 @@
 /* PROJECTPRO MANAGEMENT SUITE 
-   Version: 11.7 
-   Feature: Smart Hyperlinks & Improved Nested Lists
+   Version: 11.8 
+   Fixes: Smart Text Direction (Auto RTL/LTR) & Bulletproof Hyperlinks
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -24,20 +24,20 @@ const Dashboard = () => {
     localStorage.setItem('dark_mode', JSON.stringify(isDarkMode));
   }, [data, team, notes, isDarkMode]);
 
-  // פונקציית עריכה משופרת
+  // פקודות עריכה
   const execCmd = (cmd, value = null) => {
     document.execCommand(cmd, false, value);
   };
 
-  // פונקציית לינק חכמה
-  const insertSmartLink = () => {
-    const url = prompt("Enter URL (e.g., https://google.com):");
+  // פונקציית לינק משופרת - מזריקה HTML נקי
+  const insertHyperlink = () => {
+    const url = prompt("Enter URL (e.g. https://google.com):");
     if (!url) return;
-    const text = prompt("Enter the text to display:", url);
+    const text = prompt("Enter text to display:", url);
     if (!text) return;
     
-    // יצירת לינק HTML בצורה ידנית כדי להבטיח תקינות
-    const linkHTML = `<a href="${url}" target="_blank" style="color: #4f46e5; text-decoration: underline; font-weight: bold;">${text}</a>`;
+    // יצירת אלמנט לינק מעוצב
+    const linkHTML = `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline; font-weight: 700;">${text}</a>&nbsp;`;
     execCmd('insertHTML', linkHTML);
   };
 
@@ -46,10 +46,10 @@ const Dashboard = () => {
       id: Date.now(),
       parentId: parentId,
       title: parentId ? 'Follow-up' : 'New Note',
-      content: '<div>• New point...</div>',
+      content: '<div>• Start typing here...</div>',
       date: new Date().toLocaleString('he-IL'),
-      color: parentId ? (isDarkMode ? '#1e293b' : '#f9fafb') : (isDarkMode ? '#1e1b4b' : '#fef9c3'),
-      textColor: isDarkMode ? '#f8fafc' : '#0f172a',
+      color: parentId ? (isDarkMode ? '#1e293b' : '#f8fafb') : (isDarkMode ? '#1e1b4b' : '#fefcbf'),
+      textColor: isDarkMode ? '#f1f5f9' : '#1e293b',
       isClosed: false,
     };
     setNotes([newNote, ...notes]);
@@ -69,6 +69,9 @@ const Dashboard = () => {
   return (
     <div className={`flex h-screen ${theme.bg} ${theme.text} transition-all duration-700 font-sans overflow-hidden relative`} dir="ltr">
       
+      {/* Background decoration */}
+      <div className="absolute top-[-5%] left-[-5%] w-[30%] h-[30%] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
+
       {/* Sidebar */}
       <aside className={`w-64 ${theme.sidebar} p-6 flex flex-col shrink-0 border-r z-50 shadow-2xl`}>
         <div className="flex items-center justify-between mb-8">
@@ -80,7 +83,7 @@ const Dashboard = () => {
                 {isDarkMode ? <Sun size={18} className="text-yellow-400"/> : <Moon size={18} className="text-indigo-600"/>}
             </button>
         </div>
-        <div className="mb-6"><span className="bg-indigo-600/20 text-indigo-500 text-[10px] font-black px-3 py-1 rounded-full border border-indigo-500/30 tracking-widest uppercase">v11.7 Pro Notes</span></div>
+        <div className="mb-6"><span className="bg-indigo-600/20 text-indigo-500 text-[10px] font-black px-3 py-1 rounded-full border border-indigo-500/30 tracking-widest uppercase">v11.8 Smart Notes</span></div>
 
         <nav className="space-y-1.5 flex-1 font-bold text-sm">
           {['dashboard', 'tasks', 'gantt', 'team', 'notes'].map(tab => (
@@ -93,71 +96,72 @@ const Dashboard = () => {
 
       <main className="flex-1 overflow-y-auto p-10 relative z-10">
         {activeTab === 'notes' && (
-          <div className="space-y-6 max-w-6xl mx-auto">
+          <div className="space-y-8 max-w-6xl mx-auto">
             <div className="flex justify-between items-center">
-              <h2 className="text-3xl font-black italic uppercase tracking-tighter drop-shadow-sm text-indigo-600">Workspace</h2>
-              <button onClick={() => addNote()} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 flex items-center gap-2 hover:bg-indigo-700 hover:scale-105 transition-all">
+              <h2 className="text-3xl font-black italic uppercase tracking-tighter text-indigo-600">Smart Workspace</h2>
+              <button onClick={() => addNote()} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center gap-2 hover:bg-indigo-700 transition-all">
                 <Plus size={18}/> New Note
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
               {notes.filter(n => !n.parentId).map(note => (
                 <div key={note.id} className="space-y-6">
-                  {/* MAIN NOTE CARD */}
-                  <div className={`${theme.card} p-8 rounded-[3rem] border-2 relative group transition-all shadow-2xl ${note.isClosed ? 'opacity-30 grayscale' : ''}`} style={{ backgroundColor: note.isClosed ? '' : note.color }}>
+                  {/* MAIN NOTE */}
+                  <div className={`${theme.card} p-8 rounded-[3rem] border-2 relative group transition-all shadow-2xl ${note.isClosed ? 'opacity-30' : ''}`} style={{ backgroundColor: note.isClosed ? '' : note.color }}>
                     
-                    {/* ENHANCED TOOLBAR */}
-                    <div className="flex gap-1.5 mb-6 p-2 bg-black/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity flex-wrap border border-black/5">
-                        <button title="Bold" onClick={() => execCmd('bold')} className="p-2 hover:bg-black/10 rounded-lg transition-colors"><Bold size={16}/></button>
-                        <button title="Numbered List" onClick={() => execCmd('insertOrderedList')} className="p-2 hover:bg-black/10 rounded-lg transition-colors"><ListOrdered size={16}/></button>
-                        <button title="Smart Link" onClick={insertSmartLink} className="p-2 hover:bg-black/10 rounded-lg transition-colors"><LinkIcon size={16}/></button>
-                        <button title="Indent" onClick={() => execCmd('indent')} className="p-2 hover:bg-black/10 rounded-lg transition-colors"><Indent size={16}/></button>
-                        <button title="Outdent" onClick={() => execCmd('outdent')} className="p-2 hover:bg-black/10 rounded-lg transition-colors"><Outdent size={16}/></button>
+                    {/* TOOLBAR */}
+                    <div className="flex gap-2 mb-6 p-2 bg-black/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity border border-black/5">
+                        <button title="Bold" onClick={() => execCmd('bold')} className="p-2 hover:bg-black/10 rounded-lg"><Bold size={16}/></button>
+                        <button title="List" onClick={() => execCmd('insertUnorderedList')} className="p-2 hover:bg-black/10 rounded-lg"><ListOrdered size={16}/></button>
+                        <button title="Add Link" onClick={insertHyperlink} className="p-2 hover:bg-black/10 rounded-lg"><LinkIcon size={16}/></button>
+                        <button title="Indent" onClick={() => execCmd('indent')} className="p-2 hover:bg-black/10 rounded-lg"><Indent size={16}/></button>
+                        <button title="Outdent" onClick={() => execCmd('outdent')} className="p-2 hover:bg-black/10 rounded-lg"><Outdent size={16}/></button>
                         <div className="w-px h-6 bg-black/10 mx-1" />
-                        <button title="Text Color" onClick={() => {const c = prompt('Color?'); if(c) execCmd('foreColor', c)}} className="p-2 hover:bg-black/10 rounded-lg transition-colors"><Palette size={16}/></button>
+                        <button title="Color" onClick={() => {const c = prompt('Color?'); if(c) execCmd('foreColor', c)}} className="p-2 hover:bg-black/10 rounded-lg"><Palette size={16}/></button>
                     </div>
 
                     <div className="flex justify-between items-start mb-6">
                       <input 
-                        className="bg-transparent font-black uppercase text-base outline-none w-full tracking-tight" 
+                        className="bg-transparent font-black uppercase text-lg outline-none w-full" 
                         value={note.title} 
                         onChange={(e) => updateNote(note.id, 'title', e.target.value)}
                         style={{ color: note.textColor }}
                       />
                       <div className="flex gap-2">
-                        <button onClick={() => updateNote(note.id, 'isClosed', !note.isClosed)} className="p-2 hover:scale-110 transition-transform">{note.isClosed ? <RotateCcw size={20}/> : <CheckCircle size={20} className="text-emerald-600"/>}</button>
-                        <button onClick={() => deleteNote(note.id)} className="p-2 hover:scale-110 transition-transform text-red-500"><Trash2 size={20}/></button>
+                        <button onClick={() => updateNote(note.id, 'isClosed', !note.isClosed)} className="p-1 hover:scale-110 transition-transform">{note.isClosed ? <RotateCcw size={20}/> : <CheckCircle size={20} className="text-emerald-600"/>}</button>
+                        <button onClick={() => deleteNote(note.id)} className="p-1 hover:scale-110 transition-transform text-red-500"><Trash2 size={20}/></button>
                       </div>
                     </div>
                     
-                    {/* RICH EDITABLE AREA */}
+                    {/* EDITABLE AREA with Auto-Direction */}
                     <div 
-                      className="min-h-[180px] text-sm outline-none font-medium leading-relaxed prose prose-indigo max-w-none text-right"
+                      className="min-h-[200px] text-sm outline-none font-medium leading-relaxed prose prose-indigo max-w-none text-start"
+                      style={{ unicodeBidi: 'plaintext', textAlign: 'initial', color: note.textColor }}
                       contentEditable
                       suppressContentEditableWarning
                       onBlur={(e) => updateNote(note.id, 'content', e.currentTarget.innerHTML)}
                       dangerouslySetInnerHTML={{ __html: note.content }}
-                      style={{ color: note.textColor }}
                     />
 
                     <div className="flex justify-between items-center mt-8 pt-6 border-t border-black/5">
-                      <span className="text-[10px] font-black opacity-30 uppercase tracking-widest">{note.date}</span>
+                      <span className="text-[10px] font-black opacity-30 uppercase">{note.date}</span>
                       <div className="flex gap-4">
                         <input type="color" className="w-6 h-6 rounded-full border-2 border-white/50 cursor-pointer shadow-sm" value={note.color} onChange={(e) => updateNote(note.id, 'color', e.target.value)} />
-                        <button onClick={() => addNote(note.id)} className="text-[10px] font-black bg-indigo-600 text-white px-5 py-2 rounded-2xl uppercase flex items-center gap-2 shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all"><CornerDownRight size={14}/> Follow-up</button>
+                        <button onClick={() => addNote(note.id)} className="text-[10px] font-black bg-indigo-600 text-white px-5 py-2 rounded-2xl uppercase flex items-center gap-2 shadow-lg hover:bg-indigo-700 transition-all"><CornerDownRight size={14}/> Follow-up</button>
                       </div>
                     </div>
                   </div>
 
                   {/* CHILD NOTES */}
                   {notes.filter(child => child.parentId === note.id).map(child => (
-                    <div key={child.id} className="ml-16 relative group/child">
-                      <div className="absolute left-[-32px] top-8 text-indigo-400 transition-transform group-hover/child:translate-x-1"><CornerDownRight size={24}/></div>
+                    <div key={child.id} className="ml-16 relative">
+                      <div className="absolute left-[-32px] top-8 text-indigo-400"><CornerDownRight size={24}/></div>
                       <div className={`${theme.card} p-6 rounded-[2.5rem] border shadow-xl ${child.isClosed ? 'opacity-30' : ''}`} style={{ backgroundColor: child.color }}>
                         <input className="bg-transparent font-black w-full outline-none mb-3 text-xs uppercase" value={child.title} onChange={(e) => updateNote(child.id, 'title', e.target.value)} />
                         <div 
                           className="outline-none min-h-[80px] text-[12px] leading-relaxed"
+                          style={{ unicodeBidi: 'plaintext', textAlign: 'initial' }}
                           contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => updateNote(child.id, 'content', e.currentTarget.innerHTML)}
