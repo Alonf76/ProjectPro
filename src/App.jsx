@@ -1,6 +1,6 @@
 /* PROJECTPRO MANAGEMENT SUITE 
-   Version: 11.3 
-   Fixes: Version Badge & Add Task Functionality
+   Version: 11.4 
+   Fix: Maximum Today-Line Visibility & Layering
 */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -31,20 +31,25 @@ const Dashboard = () => {
   const projectRange = useMemo(() => {
     const today = new Date();
     today.setHours(0,0,0,0);
+    // טווח בסיסי: 3 שבועות אחורה, 3 חודשים קדימה
     let start = new Date(today);
     start.setDate(today.getDate() - 21);
+    
     if (data.length > 0) {
       const dates = data.map(d => safeDate(d.start).getTime());
       const minDate = new Date(Math.min(...dates));
       if (minDate < start) start = new Date(minDate.getTime() - (7 * 24 * 60 * 60 * 1000));
     }
+    
     let end = new Date(today);
     end.setDate(end.getDate() + 90);
+    
     if (data.length > 0) {
       const dates = data.map(d => safeDate(d.end).getTime());
       const maxDate = new Date(Math.max(...dates));
       if (maxDate > end) end = new Date(maxDate.getTime() + (14 * 24 * 60 * 60 * 1000));
     }
+    
     return { start, end, totalDays: Math.ceil((end - start) / (1000 * 60 * 60 * 24)) };
   }, [data]);
 
@@ -74,24 +79,10 @@ const Dashboard = () => {
     setData(data.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
 
-  const addTask = () => {
-    const newTask = {
-      id: Date.now(),
-      project: 'NEW PROJECT',
-      task: 'New Task',
-      start: new Date().toISOString().split('T')[0],
-      end: new Date().toISOString().split('T')[0],
-      progress: 0,
-      color: '#6366f1',
-      person: ''
-    };
-    setData([...data, newTask]);
-  };
-
   const theme = {
     bg: isDarkMode ? 'bg-slate-950' : 'bg-slate-50',
-    sidebar: isDarkMode ? 'bg-slate-900/60 backdrop-blur-2xl border-white/5 shadow-2xl' : 'bg-white/40 backdrop-blur-2xl border-white/40 shadow-xl',
-    card: isDarkMode ? 'bg-slate-900/40 backdrop-blur-xl border-white/5' : 'bg-white/40 backdrop-blur-xl border-white/60',
+    sidebar: isDarkMode ? 'bg-slate-900/60 backdrop-blur-2xl border-white/5' : 'bg-white/40 backdrop-blur-2xl border-white/40',
+    card: isDarkMode ? 'bg-slate-900/40 backdrop-blur-xl border-white/5 shadow-2xl' : 'bg-white/40 backdrop-blur-xl border-white/60 shadow-xl',
     text: isDarkMode ? 'text-slate-100' : 'text-slate-900',
     textMuted: isDarkMode ? 'text-slate-400' : 'text-slate-500',
     border: isDarkMode ? 'border-white/5' : 'border-white/40',
@@ -100,31 +91,37 @@ const Dashboard = () => {
 
   return (
     <div className={`flex h-screen ${theme.bg} ${theme.text} transition-all duration-700 font-sans overflow-hidden relative`} dir="ltr">
+      
+      {/* Background Blobs */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/20 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/20 rounded-full blur-[120px] pointer-events-none" />
 
+      {/* Sidebar */}
       <aside className={`w-64 ${theme.sidebar} p-6 flex flex-col shrink-0 border-r z-50`}>
         <div className="flex items-center justify-between mb-2">
             <div className={`flex items-center gap-3 ${isDarkMode ? 'text-white' : 'text-indigo-950'}`}>
                 <div className="bg-indigo-600 p-2 rounded-xl shadow-lg"><Activity size={20}/></div>
                 <h1 className="font-black text-xl italic tracking-tighter uppercase">ProjectPro</h1>
             </div>
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-lg hover:bg-white/10">
+            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
                 {isDarkMode ? <Sun size={18} className="text-yellow-400"/> : <Moon size={18} className="text-indigo-600"/>}
             </button>
         </div>
         
-        {/* VERSION BADGE RESTORED */}
         <div className="mb-8 mt-2">
             <span className="bg-indigo-600/20 text-indigo-500 text-[10px] font-black px-3 py-1 rounded-full border border-indigo-500/30 tracking-widest uppercase">
-                v11.3 Stable
+                v11.4 Stable
             </span>
         </div>
 
         <nav className="space-y-1.5 flex-1 font-bold text-sm">
           {['dashboard', 'tasks', 'gantt', 'team'].map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl capitalize transition-all ${activeTab === tab ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'hover:bg-indigo-600/10 hover:text-indigo-600'}`}>
-              {tab === 'dashboard' && <LayoutDashboard size={17}/>} {tab === 'tasks' && <List size={17}/>} {tab === 'gantt' && <Clock size={17}/>} {tab === 'team' && <Users size={17}/>} {tab}
+              {tab === 'dashboard' && <LayoutDashboard size={17}/>}
+              {tab === 'tasks' && <List size={17}/>}
+              {tab === 'gantt' && <Clock size={17}/>}
+              {tab === 'team' && <Users size={17}/>}
+              {tab}
             </button>
           ))}
         </nav>
@@ -153,15 +150,15 @@ const Dashboard = () => {
                         <input type="date" className={`text-[9px] p-2 border rounded-xl shadow-sm ${theme.input}`} value={t.start} onChange={e => updateTask(t.id, 'start', e.target.value)} />
                         <input type="date" className={`text-[9px] p-2 border rounded-xl shadow-sm ${theme.input}`} value={t.end} onChange={e => updateTask(t.id, 'end', e.target.value)} />
                     </td>
-                    <td className="p-4"><div className="flex items-center gap-2.5"><input type="range" className="w-16 accent-indigo-600" value={t.progress} onChange={e => updateTask(t.id, 'progress', e.target.value)} /> <span className="text-[10px] font-bold">{t.progress}%</span></div></td>
-                    <td className="p-4 text-center"><button onClick={() => setData(data.filter(x => x.id !== t.id))} className="text-slate-400 hover:text-red-500"><Trash2 size={16}/></button></td>
+                    <td className="p-4"><div className="flex items-center gap-2.5"><input type="range" className="w-16 accent-indigo-600" value={t.progress} onChange={e => updateTask(t.id, 'progress', e.target.value)} /> <span className="text-[10px] font-bold tabular-nums">{t.progress}%</span></div></td>
+                    <td className="p-4 text-center"><button onClick={() => setData(data.filter(x => x.id !== t.id))} className="text-slate-400 hover:text-red-500 p-2"><Trash2 size={16}/></button></td>
                   </tr>
                 ))}
-                {/* ADD TASK BUTTON ROW RESTORED */}
                 <tr>
                     <td colSpan="5" className="p-6 text-center">
-                        <button onClick={addTask} className="bg-indigo-600/10 text-indigo-500 hover:bg-indigo-600 hover:text-white px-6 py-2 rounded-full border border-indigo-500/30 transition-all font-black text-[10px] uppercase tracking-widest flex items-center gap-2 mx-auto shadow-sm">
-                            <Plus size={16}/> Add New Project / Task
+                        <button onClick={() => setData([...data, {id: Date.now(), project: 'NEW', task: 'New Task', start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0], progress: 0, color: '#6366f1'}])} 
+                                className="bg-indigo-600/10 text-indigo-500 hover:bg-indigo-600 hover:text-white px-6 py-2 rounded-full border border-indigo-500/30 transition-all font-black text-[10px] uppercase tracking-widest flex items-center gap-2 mx-auto shadow-sm">
+                            <Plus size={16}/> Add New Task / Project
                         </button>
                     </td>
                 </tr>
@@ -171,25 +168,44 @@ const Dashboard = () => {
         )}
 
         {activeTab === 'gantt' && (
-          <div className={`${theme.card} rounded-[2rem] border flex flex-col h-full overflow-hidden shadow-2xl`}>
+          <div className={`${theme.card} rounded-[2.5rem] border flex flex-col h-full overflow-hidden shadow-2xl`}>
             <div className="flex-1 overflow-auto relative" ref={ganttContainerRef}>
               <div style={{ width: `${projectRange.totalDays * 40 * zoomScale}px` }} className="relative min-h-full">
-                <div className={`flex sticky top-0 z-40 ${isDarkMode ? 'bg-slate-950/60 backdrop-blur-md' : 'bg-white/60 backdrop-blur-md'} border-b ${theme.border} ml-[200px]`}>
+                
+                {/* Header Timeline */}
+                <div className={`flex sticky top-0 z-40 ${isDarkMode ? 'bg-slate-950/70 backdrop-blur-md' : 'bg-white/70 backdrop-blur-md'} border-b ${theme.border} ml-[200px]`}>
                   {Array.from({length: Math.ceil(projectRange.totalDays / 7)}).map((_, i) => {
                     const d = new Date(projectRange.start); d.setDate(d.getDate() + (i * 7));
                     return <div key={i} className="flex-1 text-center py-4 border-r border-white/10 font-bold text-[9px] uppercase" style={{ minWidth: `${7 * 40 * zoomScale}px` }}>W{i+1} • {d.getDate()}/{d.getMonth()+1}</div>
                   })}
                 </div>
+
+                {/* Vertical Grid Lines */}
                 <div className="absolute inset-0 ml-[200px] pointer-events-none flex z-0">
                    {Array.from({length: projectRange.totalDays}).map((_, i) => (
                      <div key={i} className={`border-r ${isDarkMode ? 'border-white/5' : 'border-slate-200'} h-full`} style={{ width: `${40 * zoomScale}px` }} />
                    ))}
                 </div>
+
+                {/* TODAY LINE - MAXIMUM VISIBILITY (z-index: 100) */}
+                {(() => {
+                  const today = new Date();
+                  today.setHours(0,0,0,0);
+                  const diffDays = (today - projectRange.start) / (1000 * 60 * 60 * 24);
+                  const leftPos = 200 + (diffDays * 40 * zoomScale);
+                  return (
+                    <div className="absolute top-0 bottom-0 z-[100] pointer-events-none border-l-2 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.8)]" style={{ left: `${leftPos}px` }}>
+                      <div className="bg-red-500 text-white text-[8px] font-black px-2.5 py-1 rounded-full absolute top-[60px] left-1/2 -translate-x-1/2 whitespace-nowrap shadow-xl uppercase">Today</div>
+                    </div>
+                  );
+                })()}
+
+                {/* Content Rows */}
                 <div className="relative z-10">
                   {groupedData.map((group, idx) => (
                     <React.Fragment key={idx}>
                       <div className={`flex items-center border-b ${theme.border} ${isDarkMode ? 'bg-indigo-600/10' : 'bg-indigo-600/5'} sticky left-0 z-20`}>
-                        <div className={`w-[200px] shrink-0 p-4 ${isDarkMode ? 'bg-slate-900/80 backdrop-blur-lg' : 'bg-white/80 backdrop-blur-lg'} border-r sticky left-0 z-30 font-black text-[10px] text-indigo-600 uppercase`}>📁 {group.name}</div>
+                        <div className={`w-[200px] shrink-0 p-4 ${isDarkMode ? 'bg-slate-900/90 backdrop-blur-lg' : 'bg-white/80 backdrop-blur-lg'} border-r sticky left-0 z-30 font-black text-[10px] text-indigo-600 uppercase`}>📁 {group.name}</div>
                         <div className="flex-1 h-10 relative" />
                       </div>
                       {group.tasks.map(task => {
@@ -198,8 +214,8 @@ const Dashboard = () => {
                         const w = Math.ceil((end - start) / (1000*60*60*24)) * 40 * zoomScale;
                         return (
                           <div key={task.id} className={`flex items-center border-b ${theme.border} group transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-white/30'}`}>
-                            <div className={`w-[200px] shrink-0 p-4 ${isDarkMode ? 'bg-slate-900/80 backdrop-blur-lg' : 'bg-white/80 backdrop-blur-lg'} border-r sticky left-0 z-30 flex items-center gap-3 shadow-sm`}>
-                               <input type="color" value={task.color} onChange={e => updateTask(task.id, 'color', e.target.value)} className="w-4 h-4 rounded-full border-none cursor-pointer" />
+                            <div className={`w-[200px] shrink-0 p-4 ${isDarkMode ? 'bg-slate-900/90 backdrop-blur-lg' : 'bg-white/80 backdrop-blur-lg'} border-r sticky left-0 z-30 flex items-center gap-3`}>
+                               <input type="color" value={task.color} onChange={e => updateTask(task.id, 'color', e.target.value)} className="w-4 h-4 rounded-full border-none cursor-pointer bg-transparent" />
                                <div className="truncate"><p className={`text-[10px] font-black ${theme.text} uppercase`}>{task.task}</p></div>
                             </div>
                             <div className="flex-1 h-14 relative">
@@ -208,9 +224,11 @@ const Dashboard = () => {
                                  <div className="absolute inset-0 bg-black/20" style={{ width: `${task.progress}%` }} />
                                  <span className="relative z-10 font-bold">{task.progress}%</span>
                                </div>
+                               
+                               {/* Milestone Marker & Date */}
                                <div className="absolute top-3.5 flex flex-col items-center" style={{ left: `${left + w}px`, transform: 'translateX(-50%)' }}>
                                   <div className="w-3 h-3 rotate-45 border-2 border-white shadow-md" style={{ backgroundColor: task.color }} />
-                                  <span className={`text-[8px] font-black mt-5 px-1 rounded shadow-sm ${isDarkMode ? 'bg-slate-800 text-indigo-300' : 'bg-white text-indigo-600'}`}>
+                                  <span className={`text-[8px] font-black mt-5 px-1.5 py-0.5 rounded shadow-sm ${isDarkMode ? 'bg-slate-800 text-indigo-300' : 'bg-white text-indigo-600'}`}>
                                     {end.getDate()}/{end.getMonth()+1}
                                   </span>
                                </div>
